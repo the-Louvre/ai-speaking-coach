@@ -1,0 +1,36 @@
+# macOS
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs/
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+.next/
+coverage/
+
+# Runtime/cache
+.cache/
+.turbo/
+
+# Demo artifacts generated locally
+*.mov
+*.mp4
+*.webm
