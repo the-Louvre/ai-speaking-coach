@@ -1,0 +1,625 @@
+:root {
+  color: #172033;
+  background: #f6f9ff;
+  font-family:
+    "Microsoft YaHei UI",
+    "Segoe UI",
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    linear-gradient(135deg, rgba(207, 231, 255, 0.95), rgba(246, 249, 255, 0.95) 46%, rgba(230, 245, 239, 0.9)),
+    radial-gradient(circle at 30% 15%, rgba(255, 255, 255, 0.7), transparent 34%);
+}
+
+button,
+textarea {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.app-shell {
+  width: min(1280px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 24px 0 36px;
+}
+
+.topbar,
+.dialogue-header,
+.control-row,
+.action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.topbar {
+  margin-bottom: 20px;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: #426082;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  margin-bottom: 0;
+  font-size: clamp(1.65rem, 3vw, 2.7rem);
+}
+
+h2 {
+  margin-bottom: 12px;
+  font-size: clamp(1.35rem, 2vw, 2rem);
+}
+
+h3 {
+  margin-bottom: 10px;
+}
+
+.api-pill,
+.primary,
+.secondary,
+.ghost,
+.danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  border-radius: 12px;
+  padding: 0 16px;
+  font-weight: 700;
+  transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+
+.api-pill {
+  color: #175fb8;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(64, 128, 202, 0.2);
+}
+
+.primary {
+  color: white;
+  background: linear-gradient(135deg, #0f6cbd, #2591ff);
+  box-shadow: 0 12px 24px rgba(15, 108, 189, 0.25);
+}
+
+.secondary,
+.ghost {
+  color: #174a7c;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(59, 108, 158, 0.18);
+}
+
+.danger {
+  color: white;
+  background: #c03744;
+}
+
+.primary:hover,
+.secondary:hover,
+.ghost:hover,
+.danger:hover,
+.scenario-card:hover,
+.task-card:hover {
+  transform: translateY(-1px);
+}
+
+.wide {
+  width: 100%;
+}
+
+.panel,
+.scenario-card,
+.task-card {
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: 0 18px 54px rgba(55, 82, 122, 0.14);
+  backdrop-filter: blur(22px);
+}
+
+.home-grid,
+.report-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.6fr);
+  gap: 18px;
+}
+
+.hero-panel,
+.prep-panel,
+.practice-layout {
+  display: grid;
+  gap: 18px;
+}
+
+.hero-panel {
+  grid-template-columns: minmax(0, 1fr) 320px;
+  min-height: 360px;
+  padding: 28px;
+}
+
+.hero-copy {
+  align-self: center;
+}
+
+.hero-copy p:not(.eyebrow),
+.prep-panel p,
+.coach-panel p,
+.progress-panel p,
+.report-summary p {
+  color: #4a5f78;
+  line-height: 1.7;
+}
+
+.stats-panel {
+  padding: 22px;
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+
+.stat {
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  gap: 4px 10px;
+  align-items: center;
+}
+
+.stat span {
+  font-size: 1.45rem;
+  font-weight: 800;
+}
+
+.stat small {
+  grid-column: 2;
+  color: #657991;
+}
+
+.week-dots {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+}
+
+.week-dots span {
+  height: 12px;
+  border-radius: 99px;
+  background: rgba(126, 151, 179, 0.25);
+}
+
+.week-dots span.active {
+  background: linear-gradient(135deg, #0f6cbd, #48c78e);
+}
+
+.scenario-list {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.scenario-card,
+.task-card {
+  min-height: 136px;
+  padding: 18px;
+  text-align: left;
+  color: #172033;
+}
+
+.scenario-card.selected,
+.task-card.selected {
+  border-color: rgba(15, 108, 189, 0.72);
+  box-shadow: 0 16px 40px rgba(15, 108, 189, 0.18);
+}
+
+.scenario-card strong,
+.task-card strong {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 1.1rem;
+}
+
+.scenario-card span,
+.task-card span,
+.task-card small {
+  display: block;
+  color: #5c7088;
+}
+
+.prep-panel {
+  grid-template-columns: minmax(0, 1fr) 340px;
+  padding: 28px;
+}
+
+.task-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 20px 0;
+}
+
+.practice-layout {
+  grid-template-columns: 280px minmax(0, 1fr) 300px;
+}
+
+.coach-panel,
+.dialogue-panel,
+.progress-panel,
+.report-summary,
+.correction-panel,
+.score-grid {
+  padding: 22px;
+}
+
+.dialogue-panel {
+  min-height: 620px;
+}
+
+.bubble {
+  border-radius: 20px;
+  padding: 16px 18px;
+  margin: 18px 0;
+  background: #f8fbff;
+  border: 1px solid rgba(23, 74, 124, 0.14);
+}
+
+.bubble.ai {
+  border-left: 4px solid #0f6cbd;
+}
+
+.transcript-box {
+  display: grid;
+  gap: 8px;
+}
+
+.transcript-box span {
+  font-weight: 800;
+}
+
+textarea {
+  width: 100%;
+  min-height: 160px;
+  resize: vertical;
+  border: 1px solid rgba(23, 74, 124, 0.16);
+  border-radius: 18px;
+  padding: 14px 16px;
+  color: #172033;
+  background: rgba(255, 255, 255, 0.8);
+  outline: none;
+}
+
+textarea:focus {
+  border-color: #0f6cbd;
+  box-shadow: 0 0 0 4px rgba(15, 108, 189, 0.12);
+}
+
+.control-row {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.hint-line {
+  min-height: 26px;
+  margin-top: 14px;
+  color: #315b86;
+  font-weight: 700;
+}
+
+.round-list {
+  display: grid;
+  gap: 12px;
+  max-height: 390px;
+  overflow: auto;
+  margin: 18px 0;
+}
+
+.round-list div {
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.round-list span {
+  font-weight: 800;
+  color: #0f6cbd;
+}
+
+.round-list p,
+.round-list small {
+  margin: 6px 0 0;
+  color: #4d6076;
+}
+
+.coach-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 280px;
+  overflow: hidden;
+  border-radius: 22px;
+  background:
+    linear-gradient(145deg, rgba(221, 239, 255, 0.9), rgba(255, 255, 255, 0.62)),
+    repeating-linear-gradient(90deg, rgba(15, 108, 189, 0.06), rgba(15, 108, 189, 0.06) 1px, transparent 1px, transparent 18px);
+}
+
+.coach-aura {
+  position: absolute;
+  width: 190px;
+  height: 190px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(15, 108, 189, 0.22), transparent 68%);
+  animation: breathe 2.8s ease-in-out infinite;
+}
+
+.coach-figure {
+  position: relative;
+  width: 150px;
+  height: 220px;
+  animation: float 3s ease-in-out infinite;
+}
+
+.coach-hair {
+  position: absolute;
+  left: 33px;
+  top: 18px;
+  width: 84px;
+  height: 92px;
+  border-radius: 44px 44px 26px 26px;
+  background: linear-gradient(135deg, #1d2638, #4f617c);
+}
+
+.coach-face {
+  position: absolute;
+  left: 42px;
+  top: 42px;
+  width: 66px;
+  height: 76px;
+  border-radius: 24px;
+  background: #f7d8c9;
+  box-shadow: inset 0 -6px 0 rgba(120, 72, 70, 0.08);
+}
+
+.eye {
+  position: absolute;
+  top: 30px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #172033;
+  animation: blink 4.5s ease-in-out infinite;
+}
+
+.eye.left {
+  left: 17px;
+}
+
+.eye.right {
+  right: 17px;
+}
+
+.mouth {
+  position: absolute;
+  left: 25px;
+  top: 52px;
+  width: 18px;
+  height: 4px;
+  border-radius: 99px;
+  background: #b15c6a;
+}
+
+.coach-jacket {
+  position: absolute;
+  left: 22px;
+  top: 112px;
+  width: 106px;
+  height: 98px;
+  border-radius: 30px 30px 18px 18px;
+  background: linear-gradient(135deg, #ffffff, #b8dcff 45%, #0f6cbd);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.65);
+}
+
+.coach-status {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  right: 16px;
+  border-radius: 999px;
+  padding: 10px 12px;
+  color: #174a7c;
+  background: rgba(255, 255, 255, 0.82);
+  text-align: center;
+  font-weight: 800;
+}
+
+.coach-listening .coach-aura,
+.coach-thinking .coach-aura {
+  background: radial-gradient(circle, rgba(72, 199, 142, 0.28), transparent 70%);
+}
+
+.coach-celebrating .coach-aura {
+  background: radial-gradient(circle, rgba(255, 207, 74, 0.36), transparent 70%);
+}
+
+.report-grid {
+  align-items: start;
+}
+
+.report-summary h2 {
+  margin-bottom: 0;
+  color: #0f6cbd;
+  font-size: 4.2rem;
+}
+
+.checkin-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0;
+  border-radius: 16px;
+  padding: 14px;
+  color: #135c3c;
+  background: rgba(72, 199, 142, 0.15);
+  font-weight: 800;
+}
+
+.score-grid {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.score-card {
+  min-height: 150px;
+  border-radius: 16px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.score-card strong {
+  display: block;
+  color: #0f6cbd;
+  font-size: 2rem;
+}
+
+.score-card span {
+  display: block;
+  margin: 6px 0;
+  font-weight: 800;
+}
+
+.score-card small,
+.correction small,
+.correction-panel li {
+  color: #53687f;
+  line-height: 1.6;
+}
+
+.correction-panel {
+  grid-column: 1 / -1;
+}
+
+.correction {
+  border-radius: 16px;
+  padding: 14px;
+  margin-bottom: 12px;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(0.94);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes blink {
+  0%,
+  92%,
+  100% {
+    transform: scaleY(1);
+  }
+  95% {
+    transform: scaleY(0.12);
+  }
+}
+
+@media (max-width: 980px) {
+  .home-grid,
+  .hero-panel,
+  .prep-panel,
+  .practice-layout,
+  .report-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .scenario-list,
+  .task-list,
+  .score-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dialogue-panel {
+    min-height: auto;
+  }
+
+  .topbar,
+  .dialogue-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 560px) {
+  .app-shell {
+    width: min(100% - 20px, 1280px);
+    padding-top: 14px;
+  }
+
+  .hero-panel,
+  .prep-panel,
+  .coach-panel,
+  .dialogue-panel,
+  .progress-panel,
+  .report-summary,
+  .correction-panel,
+  .score-grid {
+    padding: 16px;
+  }
+
+  .control-row {
+    display: grid;
+  }
+
+  .control-row > button,
+  .action-row > button {
+    width: 100%;
+  }
+}
