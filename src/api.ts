@@ -26,6 +26,26 @@ export type HealthResult = {
   fallbackEnabled: boolean;
 };
 
+export type RuntimeSettingsResult = HealthResult & {
+  editable: {
+    openaiModel: string;
+    cartesiaVersion: string;
+    cartesiaModel: string;
+    cartesiaVoiceId: string;
+  };
+};
+
+export type RuntimeSettingsInput = {
+  apiMode?: "mock" | "live";
+  deepgramApiKey?: string;
+  openaiApiKey?: string;
+  openaiModel?: string;
+  cartesiaApiKey?: string;
+  cartesiaVersion?: string;
+  cartesiaModel?: string;
+  cartesiaVoiceId?: string;
+};
+
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...init,
@@ -41,6 +61,12 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   health: () => requestJson<HealthResult>("/api/health"),
+  settings: () => requestJson<RuntimeSettingsResult>("/api/settings"),
+  updateSettings: (payload: RuntimeSettingsInput) =>
+    requestJson<RuntimeSettingsResult>("/api/settings", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
   scenarios: () => requestJson<{ scenarios: Scenario[] }>("/api/scenarios"),
   startSession: (scenarioId: string, taskId: string) =>
     requestJson<SessionStart>("/api/session/start", {

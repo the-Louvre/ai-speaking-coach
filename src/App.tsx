@@ -7,6 +7,7 @@ import {
   Play,
   RefreshCw,
   Send,
+  Settings,
   Sparkles,
   Square,
   Volume2
@@ -15,6 +16,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CoachState, DialogueTurnResult, ReportResult, SpeechAudioResult } from "../shared/schemas";
 import type { Scenario } from "../server/data";
 import { api, type HealthResult, type SessionStart } from "./api";
+import { ApiSettingsPanel } from "./components/ApiSettingsPanel";
 import { CoachAvatar } from "./components/CoachAvatar";
 import { WeekDots } from "./components/WeekDots";
 import { getShanghaiDate, type CheckinState } from "./domain/checkin";
@@ -66,6 +68,7 @@ export default function App() {
   const [checkin, setCheckin] = useState<CheckinState>(() => loadCheckin());
   const [busy, setBusy] = useState("");
   const [recording, setRecording] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
@@ -218,11 +221,23 @@ export default function App() {
           <p className="eyebrow">AI Speaking Coach</p>
           <h1>英语口语场景冲刺</h1>
         </div>
-        <div className="api-pill">
-          <Headphones size={16} />
-          {health?.mode === "live" ? "Live API" : "Mock Demo"}
+        <div className="top-actions">
+          <div className="api-pill">
+            <Headphones size={16} />
+            {health?.mode === "live" ? "Live API" : "Mock Demo"}
+          </div>
+          <button className="secondary" onClick={() => setSettingsOpen(true)}>
+            <Settings size={16} />
+            API 配置
+          </button>
         </div>
       </header>
+
+      <ApiSettingsPanel
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onSaved={(settings) => setHealth(settings)}
+      />
 
       {screen === "home" && (
         <section className="home-grid">

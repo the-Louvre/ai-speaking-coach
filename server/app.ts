@@ -1,7 +1,14 @@
 import cors from "cors";
 import express from "express";
 import multer from "multer";
-import { getConfig, getHealth, type AppOptions } from "./config";
+import {
+  applyRuntimeSettings,
+  getConfig,
+  getHealth,
+  getRuntimeSettings,
+  type AppOptions,
+  type RuntimeSettingsInput
+} from "./config";
 import { findScenarioTask, scenarios } from "./data";
 import {
   generateReportWithOpenAI,
@@ -22,6 +29,15 @@ export function createApp(options: AppOptions = {}) {
 
   app.get("/api/health", (_req, res) => {
     res.json(getHealth(config));
+  });
+
+  app.get("/api/settings", (_req, res) => {
+    res.json(getRuntimeSettings(config));
+  });
+
+  app.post("/api/settings", (req, res) => {
+    applyRuntimeSettings(config, req.body as RuntimeSettingsInput);
+    res.json(getRuntimeSettings(config));
   });
 
   app.get("/api/scenarios", (_req, res) => {

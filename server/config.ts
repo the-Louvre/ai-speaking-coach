@@ -5,6 +5,17 @@ export type AppOptions = {
   apiMode?: "mock" | "live";
 };
 
+export type RuntimeSettingsInput = {
+  apiMode?: "mock" | "live";
+  deepgramApiKey?: string;
+  openaiApiKey?: string;
+  openaiModel?: string;
+  cartesiaApiKey?: string;
+  cartesiaVersion?: string;
+  cartesiaModel?: string;
+  cartesiaVoiceId?: string;
+};
+
 export function getConfig(options: AppOptions = {}): LiveConfig {
   const apiMode = options.apiMode ?? (process.env.API_MODE === "live" ? "live" : "mock");
 
@@ -17,6 +28,46 @@ export function getConfig(options: AppOptions = {}): LiveConfig {
     cartesiaVersion: process.env.CARTESIA_VERSION || "2026-03-01",
     cartesiaModel: process.env.CARTESIA_TTS_MODEL || "sonic-latest",
     cartesiaVoiceId: process.env.CARTESIA_VOICE_ID
+  };
+}
+
+function cleanValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+export function applyRuntimeSettings(config: LiveConfig, input: RuntimeSettingsInput): LiveConfig {
+  if (input.apiMode === "mock" || input.apiMode === "live") {
+    config.apiMode = input.apiMode;
+  }
+
+  const deepgramApiKey = cleanValue(input.deepgramApiKey);
+  const openaiApiKey = cleanValue(input.openaiApiKey);
+  const cartesiaApiKey = cleanValue(input.cartesiaApiKey);
+  const openaiModel = cleanValue(input.openaiModel);
+  const cartesiaVersion = cleanValue(input.cartesiaVersion);
+  const cartesiaModel = cleanValue(input.cartesiaModel);
+  const cartesiaVoiceId = cleanValue(input.cartesiaVoiceId);
+
+  if (deepgramApiKey) config.deepgramApiKey = deepgramApiKey;
+  if (openaiApiKey) config.openaiApiKey = openaiApiKey;
+  if (cartesiaApiKey) config.cartesiaApiKey = cartesiaApiKey;
+  if (openaiModel) config.openaiModel = openaiModel;
+  if (cartesiaVersion) config.cartesiaVersion = cartesiaVersion;
+  if (cartesiaModel) config.cartesiaModel = cartesiaModel;
+  if (cartesiaVoiceId) config.cartesiaVoiceId = cartesiaVoiceId;
+
+  return config;
+}
+
+export function getRuntimeSettings(config: LiveConfig) {
+  return {
+    ...getHealth(config),
+    editable: {
+      openaiModel: config.openaiModel,
+      cartesiaVersion: config.cartesiaVersion,
+      cartesiaModel: config.cartesiaModel,
+      cartesiaVoiceId: config.cartesiaVoiceId || ""
+    }
   };
 }
 
