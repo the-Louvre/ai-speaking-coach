@@ -24,7 +24,11 @@ describe("local API in mock mode", () => {
       .send({ scenarioId: "interview", taskId: "internship-intro" })
       .expect(200);
 
-    expect(response.body.sessionId).toMatch(/^session_/);
+    expect(response.body.sessionId).toMatch(/^practice_session_/);
+    expect(response.body.session.status).toBe("running");
+    expect(response.body.session.duration).toBe(5 * 60);
+    expect(response.body.remainingSeconds).toBe(5 * 60);
+    expect(response.body).not.toHaveProperty("roundLimit");
     expect(response.body.aiText).toContain("Tell me");
     expect(response.body.coachState).toBe("asking");
   });
@@ -116,7 +120,15 @@ describe("local API in mock mode", () => {
 
     const parsed = reportResultSchema.parse(response.body);
     expect(parsed.totalScore).toBeGreaterThanOrEqual(70);
-    expect(parsed.dimensions).toHaveLength(5);
+    expect(parsed.dimensions.map((dimension) => dimension.id)).toEqual([
+      "fluency",
+      "pronunciation",
+      "grammar",
+      "vocabulary",
+      "coherence",
+      "task_completion",
+      "interaction"
+    ]);
     expect(parsed.corrections[0].explanationZh).toContain("时态");
   });
 });

@@ -19,6 +19,17 @@ describe("OpenAI report JSON schema", () => {
   it("requires score dimension fields so live reports stay renderable", () => {
     const dimensions = reportJsonSchema.properties.dimensions;
 
+    expect(dimensions.minItems).toBe(7);
+    expect(dimensions.maxItems).toBe(7);
+    expect(dimensions.items.properties.id.enum).toEqual([
+      "fluency",
+      "pronunciation",
+      "grammar",
+      "vocabulary",
+      "coherence",
+      "task_completion",
+      "interaction"
+    ]);
     expect(dimensions.items.required).toEqual([
       "id",
       "labelZh",

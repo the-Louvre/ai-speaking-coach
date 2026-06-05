@@ -49,7 +49,15 @@ export const speechAudioResultSchema = z.object({
 });
 
 export const scoreDimensionSchema = z.object({
-  id: z.enum(["pronunciation", "fluency", "grammar", "expression", "taskCompletion"]),
+  id: z.enum([
+    "fluency",
+    "pronunciation",
+    "grammar",
+    "vocabulary",
+    "coherence",
+    "task_completion",
+    "interaction"
+  ]),
   labelZh: z.string(),
   labelEn: z.string(),
   score: z.number(),
@@ -74,8 +82,38 @@ export const reportResultSchema = z.object({
   fallback: z.boolean().optional()
 });
 
+export const conversationTurnSchema = z.object({
+  id: z.string(),
+  speaker: z.enum(["ai", "user", "system"]),
+  text: z.string(),
+  timestamp: z.string(),
+  transcriptConfidence: z.number().optional(),
+  audioDurationSec: z.number().optional(),
+  latencyMs: z.number().optional(),
+  hintZh: z.string().optional(),
+  keywords: z.array(z.string()).optional()
+});
+
+export const practiceSessionStatusSchema = z.enum(["running", "paused", "completed", "expired", "cancelled"]);
+
+export const practiceSessionSchema = z.object({
+  id: z.string(),
+  start_time: z.string(),
+  end_time: z.string().nullable(),
+  duration: z.number(),
+  status: practiceSessionStatusSchema,
+  scenario_id: z.string(),
+  scenario_label: z.string(),
+  target_goal: z.string(),
+  conversation_turns: z.array(conversationTurnSchema),
+  final_report: reportResultSchema.nullable()
+});
+
 export type CoachState = z.infer<typeof coachStateSchema>;
 export type TranscriptResult = z.infer<typeof transcriptResultSchema>;
 export type DialogueTurnResult = z.infer<typeof dialogueTurnResultSchema>;
 export type SpeechAudioResult = z.infer<typeof speechAudioResultSchema>;
 export type ReportResult = z.infer<typeof reportResultSchema>;
+export type ConversationTurn = z.infer<typeof conversationTurnSchema>;
+export type PracticeSession = z.infer<typeof practiceSessionSchema>;
+export type PracticeSessionStatus = z.infer<typeof practiceSessionStatusSchema>;

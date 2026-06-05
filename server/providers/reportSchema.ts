@@ -16,8 +16,8 @@ export const reportJsonSchema = {
     totalScore: { type: "number", minimum: 0, maximum: 100 },
     dimensions: {
       type: "array",
-      minItems: 5,
-      maxItems: 5,
+      minItems: 7,
+      maxItems: 7,
       items: {
         type: "object",
         additionalProperties: false,
@@ -25,7 +25,15 @@ export const reportJsonSchema = {
         properties: {
           id: {
             type: "string",
-            enum: ["pronunciation", "fluency", "grammar", "expression", "taskCompletion"]
+            enum: [
+              "fluency",
+              "pronunciation",
+              "grammar",
+              "vocabulary",
+              "coherence",
+              "task_completion",
+              "interaction"
+            ]
           },
           labelZh: { type: "string" },
           labelEn: { type: "string" },

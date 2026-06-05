@@ -14,8 +14,10 @@ const report: ReportResult = {
     { id: "pronunciation", labelZh: "发音清晰度", labelEn: "Pronunciation", score: 82, explanationZh: "" },
     { id: "fluency", labelZh: "流利度", labelEn: "Fluency", score: 88, explanationZh: "" },
     { id: "grammar", labelZh: "语法准确度", labelEn: "Grammar", score: 80, explanationZh: "" },
-    { id: "expression", labelZh: "表达自然度", labelEn: "Expression", score: 84, explanationZh: "" },
-    { id: "taskCompletion", labelZh: "任务完成度", labelEn: "Task Completion", score: 90, explanationZh: "" }
+    { id: "vocabulary", labelZh: "词汇丰富度", labelEn: "Vocabulary", score: 84, explanationZh: "" },
+    { id: "coherence", labelZh: "表达连贯性", labelEn: "Coherence", score: 85, explanationZh: "" },
+    { id: "task_completion", labelZh: "任务完成度", labelEn: "Task Completion", score: 90, explanationZh: "" },
+    { id: "interaction", labelZh: "互动回应", labelEn: "Interaction", score: 87, explanationZh: "" }
   ],
   summaryZh: "回答清楚。",
   corrections: [{ original: "I build app.", improved: "I built an app.", explanationZh: "使用过去式。" }],
@@ -56,7 +58,7 @@ describe("learning progress tracking", () => {
       nextGoal: "先说明限制。",
       dimensions: [
         { id: "grammar", labelZh: "语法准确度", score: 74 },
-        { id: "taskCompletion", labelZh: "任务完成度", score: 80 }
+        { id: "task_completion", labelZh: "任务完成度", score: 80 }
       ]
     };
     const newest = createLearningRecord({

@@ -16,6 +16,8 @@ import {
   synthesizeWithCartesia,
   transcribeWithDeepgram
 } from "./providers/liveProviders";
+import { completePracticeSession } from "./practiceSession";
+import { practiceSessionStore } from "./sessionStore";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
@@ -46,6 +48,7 @@ function normalizeCustomScenario(value: unknown): Scenario | null {
 export function createApp(options: AppOptions = {}) {
   const app = express();
   const config = getConfig(options);
+  app.locals.config = config;
 
   app.use(cors());
   app.use(express.json({ limit: "2mb" }));
@@ -74,15 +77,34 @@ export function createApp(options: AppOptions = {}) {
     const { scenario, task } = customScenario
       ? { scenario: customScenario, task: customScenario.tasks[0] }
       : findScenarioTask(scenarioId, taskId);
+    const durationMinutes = Number(req.body?.durationMinutes || 5);
+    const session = practiceSessionStore.create({
+      scenarioId: scenario.id,
+      scenarioLabel: `${scenario.nameZh} / ${scenario.nameEn}`,
+      targetGoal: task.focus,
+      durationMinutes,
+      openingAiText: task.openingQuestion
+    });
     res.json({
-      sessionId: `session_${Date.now()}`,
+      sessionId: session.id,
+      session,
       aiText: task.openingQuestion,
       hintZh: `这一轮重点：${task.focus}。先回答问题，再补一个具体例子。`,
       coachState: "asking",
-      roundLimit: 5,
+      duration: session.duration,
+      remainingSeconds: session.duration,
       scenario,
       task
     });
+  });
+
+  app.get("/api/session/:sessionId", (req, res) => {
+    const session = practiceSessionStore.get(req.params.sessionId);
+    if (!session) {
+      res.status(404).json({ error: "practice_session not found" });
+      return;
+    }
+    res.json({ session });
   });
 
   app.post("/api/asr/transcribe", upload.single("audio"), async (req, res) => {
@@ -113,7 +135,10 @@ export function createApp(options: AppOptions = {}) {
   });
 
   app.post("/api/report/generate", async (req, res) => {
-    const result = await generateReportWithLlm(req.body, config);
+    const sessionId = String(req.body?.sessionId || "");
+    const session = sessionId ? practiceSessionStore.get(sessionId) : null;
+    const result = await generateReportWithLlm(session ? { ...req.body, conversation_turns: session.conversation_turns } : req.body, config);
+    if (session) completePracticeSession(session, result);
     res.json(result);
   });
 

@@ -1,5 +1,7 @@
 import type {
+  ConversationTurn,
   DialogueTurnResult,
+  PracticeSession,
   ReportResult,
   SpeechAudioResult,
   TranscriptResult
@@ -8,10 +10,12 @@ import type { Scenario } from "../server/data";
 
 export type SessionStart = {
   sessionId: string;
+  session: PracticeSession;
   aiText: string;
   hintZh: string;
   coachState: "asking";
-  roundLimit: number;
+  duration: number;
+  remainingSeconds: number;
   scenario: Scenario;
   task: Scenario["tasks"][number];
 };
@@ -137,5 +141,36 @@ export const api = {
     requestJson<ReportResult>("/api/report/generate", {
       method: "POST",
       body: JSON.stringify(payload)
-    })
+    }),
+  readSession: (sessionId: string) => requestJson<{ session: PracticeSession }>(`/api/session/${sessionId}`)
 };
+
+export type PracticeRealtimeEvent =
+  | {
+      type: "session_started";
+      session: PracticeSession;
+      aiText: string;
+      remainingSeconds: number;
+      keywords: string[];
+    }
+  | { type: "status"; sessionId: string; status: string; remainingSeconds?: number }
+  | { type: "transcript_final"; sessionId: string; turn: ConversationTurn }
+  | {
+      type: "ai_reply";
+      sessionId: string;
+      turn: ConversationTurn;
+      speech: SpeechAudioResult;
+      hintZh: string;
+      positiveFeedback: string;
+      correctionPreview: string;
+      keywords: string[];
+      remainingSeconds: number;
+    }
+  | { type: "session_finished"; session: PracticeSession; report: ReportResult }
+  | { type: "error"; message: string };
+
+export function createPracticeSocket() {
+  const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+  const host = window.location.port === "5173" ? `${window.location.hostname}:5174` : window.location.host;
+  return new WebSocket(`${protocol}://${host}/api/practice/ws`);
+}

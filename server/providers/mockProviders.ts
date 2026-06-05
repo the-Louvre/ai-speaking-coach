@@ -52,6 +52,19 @@ export function mockTranscribe(): TranscriptResult {
 }
 
 export function mockDialogueTurn(userText: string, round: number): DialogueTurnResult {
+  if (/urgent/i.test(userText)) {
+    return {
+      aiText: "Do you mean an AI agent project? What problem did it solve?",
+      hintZh: "AI 听到的 urgent 可能是 agent。先确认关键词，再说明项目解决的问题。",
+      coachState: "asking",
+      positiveFeedback: "你已经说出了项目主题，接下来把关键词说准就更好了。",
+      correctionPreview: "如果你想表达 AI agent，可以说 It is about my AI agent project.",
+      nextRoundGoal: "确认项目类型，并说明它解决了什么问题。",
+      provider: "mock",
+      fallback: true
+    };
+  }
+
   const resultWord = /result|improved|increase|reduced|saved|score/i.test(userText)
     ? "Good. Now make the result measurable with one number."
     : "What result did your work create for users or the team?";
@@ -90,18 +103,18 @@ export function mockReport(): ReportResult {
     totalScore: 84,
     dimensions: [
       {
-        id: "pronunciation",
-        labelZh: "发音清晰度",
-        labelEn: "Pronunciation",
-        score: 82,
-        explanationZh: "转写置信度较高，个别长词需要放慢。"
-      },
-      {
         id: "fluency",
         labelZh: "流利度",
         labelEn: "Fluency",
         score: 85,
         explanationZh: "回答连贯，但可以减少重复铺垫。"
+      },
+      {
+        id: "pronunciation",
+        labelZh: "发音清晰度",
+        labelEn: "Pronunciation",
+        score: 82,
+        explanationZh: "转写置信度较高，个别长词需要放慢。"
       },
       {
         id: "grammar",
@@ -111,18 +124,32 @@ export function mockReport(): ReportResult {
         explanationZh: "主要问题是冠词和动词时态，需要注意单复数。"
       },
       {
-        id: "expression",
-        labelZh: "表达自然度",
-        labelEn: "Expression",
+        id: "vocabulary",
+        labelZh: "词汇准确度",
+        labelEn: "Vocabulary",
         score: 84,
-        explanationZh: "表达能被理解，但推荐使用更自然的项目结果表述。"
+        explanationZh: "项目词汇基本准确，但 agent/result 等关键词需要更清晰。"
       },
       {
-        id: "taskCompletion",
+        id: "coherence",
+        labelZh: "连贯性",
+        labelEn: "Coherence",
+        score: 83,
+        explanationZh: "能围绕项目说明，但背景、职责、结果之间衔接还可以更紧。"
+      },
+      {
+        id: "task_completion",
         labelZh: "任务完成度",
         labelEn: "Task Completion",
         score: 88,
         explanationZh: "回答覆盖项目内容，并能继续回应追问。"
+      },
+      {
+        id: "interaction",
+        labelZh: "互动回应",
+        labelEn: "Interaction",
+        score: 81,
+        explanationZh: "能回应追问，但可以更主动确认问题并补充细节。"
       }
     ],
     summaryZh: "你能把项目讲出来，但结果表达还不够具体。下一轮优先补一个数字或真实影响。",

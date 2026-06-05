@@ -1,15 +1,14 @@
 import {
   Award,
-  BadgeCheck,
   BarChart3,
   CalendarDays,
   Headphones,
   Mic,
+  Pause,
   PencilLine,
   Play,
   RefreshCw,
   Route,
-  Send,
   Settings,
   Sparkles,
   Square,
@@ -18,9 +17,9 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CoachState, DialogueTurnResult, ReportResult, SpeechAudioResult } from "../shared/schemas";
+import type { CoachState, ConversationTurn, PracticeSession, ReportResult, SpeechAudioResult } from "../shared/schemas";
 import type { Scenario } from "../server/data";
-import { api, type HealthResult, type SessionStart } from "./api";
+import { api, createPracticeSocket, type HealthResult, type PracticeRealtimeEvent } from "./api";
 import { ApiSettingsPanel } from "./components/ApiSettingsPanel";
 import { BrandTopBar } from "./components/BrandGuidelines";
 import { CoachAvatar } from "./components/CoachAvatar";
@@ -43,14 +42,7 @@ import {
 } from "./domain/learning";
 
 type Screen = "home" | "prep" | "practice" | "report";
-type Turn = {
-  round: number;
-  aiText: string;
-  userText: string;
-  hintZh?: string;
-  correctionPreview?: string;
-  transcriptConfidence?: number;
-};
+type PracticeStatus = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "paused" | "completed";
 type JourneyStatus = "done" | "active" | "waiting";
 type JourneyStep = {
   label: string;
@@ -98,13 +90,17 @@ export default function App() {
   const [scenarios, setScenarios] = useState<Scenario[]>(fallbackScenarios);
   const [scenario, setScenario] = useState<Scenario>(fallbackScenarios[0]);
   const [task, setTask] = useState<Scenario["tasks"][number]>(fallbackScenarios[0].tasks[0]);
-  const [session, setSession] = useState<SessionStart | null>(null);
+  const [practiceSession, setPracticeSession] = useState<PracticeSession | null>(null);
+  const [practiceStatus, setPracticeStatus] = useState<PracticeStatus>("idle");
+  const [remainingSeconds, setRemainingSeconds] = useState(5 * 60);
+  const [selectedDurationMinutes, setSelectedDurationMinutes] = useState(5);
   const [coachState, setCoachState] = useState<CoachState>("idle");
   const [draft, setDraft] = useState("");
-  const [turns, setTurns] = useState<Turn[]>([]);
+  const [conversationTurns, setConversationTurns] = useState<ConversationTurn[]>([]);
   const [latestAiText, setLatestAiText] = useState("");
   const [latestHint, setLatestHint] = useState("");
   const [positiveFeedback, setPositiveFeedback] = useState("");
+  const [keywords, setKeywords] = useState<string[]>(["background", "role", "result"]);
   const [speech, setSpeech] = useState<SpeechAudioResult | null>(null);
   const [speechNotice, setSpeechNotice] = useState("");
   const [speechAudioSrc, setSpeechAudioSrc] = useState("");
@@ -120,23 +116,24 @@ export default function App() {
   const chunksRef = useRef<Blob[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
+  const socketRef = useRef<WebSocket | null>(null);
+  const countdownRef = useRef<number | null>(null);
 
   const todayDone = checkin.completedDates.includes(getShanghaiDate());
-  const currentRound = turns.length + 1;
-  const roundLimit = session?.roundLimit ?? 5;
   const learningSummary = useMemo(() => summarizeLearning(learning), [learning]);
   const latestLearningRecord = learning.records[0] ?? null;
+  const userTurnCount = conversationTurns.filter((turn) => turn.speaker === "user").length;
   const journeySteps = useMemo(
     () =>
       createJourneySteps({
         screen,
         busy,
         recording,
-        turnCount: turns.length,
+        turnCount: userTurnCount,
         hasDraft: Boolean(draft.trim()),
         hasReport: Boolean(report)
       }),
-    [busy, draft, recording, report, screen, turns.length]
+    [busy, draft, recording, report, screen, userTurnCount]
   );
 
   useEffect(() => {
@@ -158,11 +155,15 @@ export default function App() {
 
   useEffect(() => {
     return () => {
+      socketRef.current?.close();
       if (audioUrlRef.current) {
         URL.revokeObjectURL(audioUrlRef.current);
         audioUrlRef.current = null;
       }
       window.speechSynthesis?.cancel();
+      if (countdownRef.current) {
+        window.clearInterval(countdownRef.current);
+      }
     };
   }, []);
 
@@ -172,47 +173,156 @@ export default function App() {
     return "今天别拖，5 分钟面试冲刺先完成。";
   }, [report, screen, todayDone]);
 
-  async function startPractice() {
-    setBusy("创建练习任务");
+  function enterPracticeRoom() {
+    setStartError("");
+    setScreen("practice");
+  }
+
+  function startCountdown(initialSeconds: number) {
+    if (countdownRef.current) window.clearInterval(countdownRef.current);
+    setRemainingSeconds(initialSeconds);
+    countdownRef.current = window.setInterval(() => {
+      setRemainingSeconds((current) => Math.max(0, current - 1));
+    }, 1000);
+  }
+
+  function handleRealtimeEvent(event: PracticeRealtimeEvent) {
+    if (event.type === "session_started") {
+      setPracticeSession(event.session);
+      setConversationTurns(event.session.conversation_turns);
+      setLatestAiText(event.aiText);
+      setKeywords(event.keywords);
+      setRemainingSeconds(event.remainingSeconds);
+      setPracticeStatus("listening");
+      setCoachState("asking");
+      setBusy("");
+      startCountdown(event.remainingSeconds);
+      void api.synthesize(event.aiText).then((speechResult) => {
+        setSpeech(speechResult);
+        playSpeech(speechResult, event.aiText);
+      });
+      return;
+    }
+
+    if (event.type === "status") {
+      if (event.status === "paused") setPracticeStatus("paused");
+      if (event.status === "listening") setPracticeStatus("listening");
+      if (event.status === "thinking") setPracticeStatus("thinking");
+      if (typeof event.remainingSeconds === "number") setRemainingSeconds(event.remainingSeconds);
+      return;
+    }
+
+    if (event.type === "transcript_final") {
+      setConversationTurns((items) => [...items, event.turn]);
+      setDraft("");
+      return;
+    }
+
+    if (event.type === "ai_reply") {
+      setConversationTurns((items) => [...items, event.turn]);
+      setLatestAiText(event.turn.text);
+      setLatestHint(event.hintZh);
+      setPositiveFeedback(event.positiveFeedback);
+      setKeywords(event.keywords);
+      setRemainingSeconds(event.remainingSeconds);
+      setSpeech(event.speech);
+      setBusy("");
+      setPracticeStatus("speaking");
+      setCoachState("asking");
+      playSpeech(event.speech, event.turn.text);
+      window.setTimeout(() => setPracticeStatus("listening"), 900);
+      return;
+    }
+
+    if (event.type === "session_finished") {
+      if (countdownRef.current) window.clearInterval(countdownRef.current);
+      setPracticeSession(event.session);
+      setConversationTurns(event.session.conversation_turns);
+      setReport(event.report);
+      setCheckin(completeToday(event.report.totalScore, event.report.reportId));
+      setLearning(
+        recordLearning(
+          createLearningRecord({
+            date: getShanghaiDate(),
+            scenarioNameZh: scenario.nameZh,
+            scenarioNameEn: scenario.nameEn,
+            taskTitleZh: task.titleZh,
+            focus: task.focus,
+            roundCount: event.session.conversation_turns.filter((turn) => turn.speaker === "user").length,
+            report: event.report
+          })
+        )
+      );
+      setPracticeStatus("completed");
+      setCoachState("celebrating");
+      setScreen("report");
+      setBusy("");
+      return;
+    }
+
+    if (event.type === "error") {
+      setBusy("");
+      setStartError(event.message);
+      setPracticeStatus("idle");
+    }
+  }
+
+  function sendRealtime(payload: Record<string, unknown>) {
+    const socket = socketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      setStartError("实时对话连接未建立，请重新点击开始对话。");
+      return false;
+    }
+    socket.send(JSON.stringify(payload));
+    return true;
+  }
+
+  function startConversation() {
+    setBusy("连接实时对话");
     setStartError("");
     setSpeechNotice("");
     setSpeechAudioSrc("");
     setSpeech(null);
     setPositiveFeedback("");
+    setLatestHint("");
+    setConversationTurns([]);
+    setPracticeSession(null);
+    setReport(null);
+    setPracticeStatus("connecting");
     setCoachState("thinking");
 
-    try {
-      const next = await api.startSession(scenario.id, task.id, isCustomScenario(scenario) ? scenario : undefined);
-      setSession(next);
-      setScenario(next.scenario);
-      setTask(next.task);
-      setLatestAiText(next.aiText);
-      setLatestHint(next.hintZh);
-      setTurns([]);
-      setDraft("");
-      setReport(null);
-      setCoachState("asking");
-      setScreen("practice");
-      setBusy("生成教练语音");
-
-      void api
-        .synthesize(next.aiText)
-        .then((speechResult) => {
-          setSpeech(speechResult);
-          playSpeech(speechResult, next.aiText);
-        })
-        .catch(() => {
-          setSpeechNotice("真人 TTS 暂时不可用，可以先开始练习，稍后再重播。");
-        })
-        .finally(() => setBusy(""));
-    } catch {
+    socketRef.current?.close();
+    const socket = createPracticeSocket();
+    socketRef.current = socket;
+    socket.onmessage = (message) => handleRealtimeEvent(JSON.parse(message.data) as PracticeRealtimeEvent);
+    socket.onerror = () => {
+      setStartError("实时对话连接失败，请确认本地 API 服务 5174 正常运行。");
       setBusy("");
+      setPracticeStatus("idle");
       setCoachState("idle");
-      setStartError("无法创建练习任务，请确认本地 API 服务 5174 正常运行后再试。");
-    }
+    };
+    socket.onclose = () => {
+      setBusy("");
+    };
+    socket.onopen = () => {
+      socket.send(
+        JSON.stringify({
+          type: "start",
+          scenarioId: scenario.id,
+          taskId: task.id,
+          customScenario: isCustomScenario(scenario) ? scenario : undefined,
+          durationMinutes: selectedDurationMinutes
+        })
+      );
+    };
   }
 
   async function beginRecording() {
+    if (!practiceSession) {
+      setLatestHint("请先点击“开始对话”，创建连续训练 session。");
+      return;
+    }
+
     if (!navigator.mediaDevices?.getUserMedia) {
       setLatestHint("当前浏览器无法录音，可以直接输入回答或使用模拟转写。");
       return;
@@ -242,69 +352,82 @@ export default function App() {
   }
 
   async function runTranscription(audio?: Blob) {
-    setBusy("识别语音");
+    if (!practiceSession) return;
+    setBusy("VAD 已断句，识别语音");
     setCoachState("thinking");
+    setPracticeStatus("thinking");
     const transcript = await api.transcribe(audio);
     setDraft(transcript.text);
     setLatestHint(
       transcript.fallback
-        ? "当前使用模拟转写，可直接编辑答案后提交。"
-        : `转写置信度 ${(transcript.confidence * 100).toFixed(0)}%，可编辑后提交。`
+        ? "当前使用模拟转写，系统已自动把这句话发给 AI。"
+        : `转写置信度 ${(transcript.confidence * 100).toFixed(0)}%，系统已自动断句。`
     );
-    setCoachState("idle");
-    setBusy("");
+    const sent = sendRealtime({
+      type: "user_utterance",
+      sessionId: practiceSession.id,
+      text: transcript.text,
+      transcriptConfidence: transcript.confidence,
+      audioDurationSec: transcript.durationSec
+    });
+    setCoachState("thinking");
+    if (!sent) setBusy("");
   }
 
-  async function submitTurn() {
-    if (!session || !draft.trim()) return;
-    setBusy("生成追问");
+  function sendUserUtterance(text: string) {
+    if (!practiceSession || !text.trim()) return;
+    setBusy("VAD 已断句，生成追问");
     setCoachState("thinking");
-    const turnResult: DialogueTurnResult = await api.nextTurn({
-      sessionId: session.sessionId,
-      scenarioId: scenario.id,
-      taskId: task.id,
-      scenarioLabel: `${scenario.nameZh} / ${scenario.nameEn}`,
-      taskTitle: `${task.titleZh} / ${task.titleEn}`,
-      taskFocus: task.focus,
-      aiRoleZh: task.aiRoleZh,
-      round: currentRound,
-      userText: draft
+    setPracticeStatus("thinking");
+    const sent = sendRealtime({
+      type: "user_utterance",
+      sessionId: practiceSession.id,
+      text,
+      transcriptConfidence: 0.93,
+      audioDurationSec: 4.1
     });
-    const speechResult = await api.synthesize(turnResult.aiText);
-    setTurns((items) => [
-      ...items,
-      {
-        round: currentRound,
-        aiText: latestAiText,
-        userText: draft,
-        hintZh: turnResult.hintZh,
-        correctionPreview: turnResult.correctionPreview,
-        transcriptConfidence: 0.93
-      }
-    ]);
-    setLatestAiText(turnResult.aiText);
-    setLatestHint(turnResult.hintZh);
-    setPositiveFeedback(turnResult.positiveFeedback);
-    setSpeech(speechResult);
-    playSpeech(speechResult, turnResult.aiText);
+    if (!sent) setBusy("");
     setDraft("");
-    setCoachState(turnResult.coachState);
-    setBusy("");
-    window.scrollTo({ top: 0, behavior: "instant" });
+  }
+
+  function simulateUtterance() {
+    const samples = [
+      "It is about my AI urgent.",
+      "I built a campus navigation app and improved the route flow.",
+      "My role was designing the interaction and testing the route planning feature.",
+      "The result was reducing route search time by about thirty percent."
+    ];
+    const next = samples[userTurnCount % samples.length];
+    setDraft(next);
+    window.setTimeout(() => sendUserUtterance(next), 900);
+  }
+
+  function pauseConversation() {
+    if (!practiceSession) return;
+    if (practiceStatus === "paused") {
+      sendRealtime({ type: "resume", sessionId: practiceSession.id });
+      setPracticeStatus("listening");
+      return;
+    }
+    sendRealtime({ type: "pause", sessionId: practiceSession.id });
+    setPracticeStatus("paused");
   }
 
   async function finishSession() {
-    if (!session) return;
+    if (!practiceSession) return;
     setBusy("生成课后报告");
     setCoachState("reviewing");
+    setPracticeStatus("thinking");
+    if (sendRealtime({ type: "end", sessionId: practiceSession.id })) return;
+
     const result = await api.generateReport({
-      sessionId: session.sessionId,
+      sessionId: practiceSession.id,
       scenarioId: scenario.id,
       taskId: task.id,
       scenarioNameZh: scenario.nameZh,
       taskTitleZh: task.titleZh,
       taskFocus: task.focus,
-      turns
+      conversation_turns: conversationTurns
     });
     setReport(result);
     setCheckin(completeToday(result.totalScore, result.reportId));
@@ -316,7 +439,7 @@ export default function App() {
           scenarioNameEn: scenario.nameEn,
           taskTitleZh: task.titleZh,
           focus: task.focus,
-          roundCount: turns.length,
+          roundCount: userTurnCount,
           report: result
         })
       )
@@ -430,7 +553,7 @@ export default function App() {
             <button
               className={`screen-tab ${screen === "practice" || screen === "prep" ? "active" : ""}`}
               type="button"
-              onClick={() => setScreen(session ? "practice" : "prep")}
+              onClick={() => setScreen(practiceSession ? "practice" : "prep")}
             >
               ② 练习页
             </button>
@@ -474,7 +597,7 @@ export default function App() {
               <p className="muted">{HOME_COPY.subtitle}</p>
               <div className="goal-box">🎯 本轮目标：{task.focus}</div>
               <div className="top-actions">
-                <button className="primary" onClick={startPractice}>
+                <button className="primary" onClick={enterPracticeRoom}>
                   <Play size={18} />
                   {HOME_COPY.startButton}
                 </button>
@@ -603,9 +726,21 @@ export default function App() {
               onChange={setCustomForm}
               onApply={applyCustomScenario}
             />
-            <button className="primary" onClick={startPractice} disabled={Boolean(busy)}>
+            <div className="duration-picker" aria-label="训练时长">
+              {[3, 5, 7, 10].map((minutes) => (
+                <button
+                  type="button"
+                  key={minutes}
+                  className={selectedDurationMinutes === minutes ? "active" : ""}
+                  onClick={() => setSelectedDurationMinutes(minutes)}
+                >
+                  {minutes} 分钟
+                </button>
+              ))}
+            </div>
+            <button className="primary" onClick={enterPracticeRoom} disabled={Boolean(busy)}>
               <Sparkles size={18} />
-              {busy || "开始 5 分钟练习"}
+              {busy || "进入对话房间"}
             </button>
             {startError && <div className="hint-line">{startError}</div>}
           </div>
@@ -617,57 +752,99 @@ export default function App() {
         <>
         <div className="practice-top">
           <span className="practice-chip green">{scenario.nameZh} · {scenario.nameEn}</span>
-          <span className="practice-chip">第 {Math.min(currentRound, roundLimit)} / {roundLimit} 轮</span>
+          <span className="practice-chip">剩余 {formatSeconds(remainingSeconds)}</span>
+          <span className="practice-chip">状态：{practiceStatusLabel(practiceStatus)}</span>
           <span className="practice-chip goal">🎯 {task.focus}</span>
         </div>
         <section className="practice-grid">
-          <div className="stage">
-            <div className="stage-q">{latestAiText}</div>
+          <div className="stage dialogue-room">
+            <div className="stage-q">{latestAiText || "点击开始对话，AI 会围绕当前目标持续追问。"}</div>
             <div className="stage-mascot">
               <CoachAvatar state={coachState} size={150} />
             </div>
+            <div className="caption-stream" aria-label="会议式实时字幕流">
+              {conversationTurns.length === 0 ? (
+                <div className="caption-line system">字幕会在这里按时间流动，不需要手动提交每一轮。</div>
+              ) : (
+                conversationTurns.slice(-6).map((turn) => (
+                  <div className={`caption-line ${turn.speaker}`} key={turn.id}>
+                    <span>{turn.speaker === "ai" ? "AI" : turn.speaker === "user" ? "You" : "System"}</span>
+                    <p>{turn.text}</p>
+                  </div>
+                ))
+              )}
+            </div>
             {draft && <div className="stage-subtitle">{draft}</div>}
             {recording && <div className="stage-ring" />}
-            <button
-              className="stage-speak"
-              onClick={recording ? stopRecording : beginRecording}
-              disabled={Boolean(busy) && !recording}
-            >
-              {recording ? "停止" : coachState === "thinking" ? "思考中" : "开始回答"}
-            </button>
-            <p className="muted stage-note">说完点“停止”，系统会转写并继续追问。</p>
+            <div className="mic-status">
+              <Mic size={18} />
+              {recording ? "麦克风采集中，停顿后自动断句" : practiceSession ? "实时字幕待命" : "尚未开始对话"}
+            </div>
+            <p className="muted stage-note">VAD 断句窗口：停顿 0.8–1.2 秒自动处理；沉默 6 秒 AI 会提示。</p>
           </div>
 
           <aside className="practice-side">
             <div className="goal-now">
-              <span className="eyebrow">本轮目标</span>
+              <span className="eyebrow">训练目标</span>
               <p>{task.focus}</p>
             </div>
             {positiveFeedback && <div className="round-tip">👏 {positiveFeedback}</div>}
             {(busy || latestHint) && <div className="round-tip">💡 {busy || latestHint}</div>}
             {speechNotice && <div className="round-tip">{speechNotice}</div>}
 
-            <label className="transcript-box compact-transcript">
-              <span>字幕 / 可编辑回答</span>
+            <div className="keyword-panel">
+              <span className="eyebrow">表达提示</span>
+              <div>
+                {keywords.map((keyword) => (
+                  <span key={keyword}>{keyword}</span>
+                ))}
+              </div>
+            </div>
+
+            <label className="caption-input">
+              <span>本地演示输入</span>
               <textarea
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
-                placeholder="可以录音识别，也可以直接输入英文回答..."
+                placeholder="可输入一句英文，系统会模拟 VAD 停顿后自动发送..."
               />
             </label>
 
-            <div className="control-row side-actions">
-              <button className="secondary" onClick={() => runTranscription()} disabled={Boolean(busy)}>
-                <RefreshCw size={18} />
-                使用模拟转写
+            <div className="conversation-controls">
+              {!practiceSession ? (
+                <button className="primary wide" onClick={startConversation} disabled={Boolean(busy)}>
+                  <Play size={18} />
+                  开始对话
+                </button>
+              ) : (
+                <button className="secondary wide" onClick={recording ? stopRecording : beginRecording} disabled={practiceStatus === "paused" || Boolean(busy)}>
+                  <Mic size={18} />
+                  {recording ? "停止录音并自动断句" : "开启麦克风"}
+                </button>
+              )}
+              <button className="secondary wide" onClick={pauseConversation} disabled={!practiceSession || Boolean(busy)}>
+                {practiceStatus === "paused" ? <Play size={17} /> : <Pause size={17} />}
+                {practiceStatus === "paused" ? "继续" : "暂停"}
               </button>
-              <button className="primary" onClick={submitTurn} disabled={!draft.trim() || Boolean(busy)}>
-                <Send size={18} />
-                提交这一轮
+              <button className="secondary wide" onClick={() => sendUserUtterance(draft)} disabled={!practiceSession || !draft.trim() || Boolean(busy)}>
+                <Sparkles size={17} />
+                VAD 自动发送这句话
+              </button>
+              <button className="secondary wide" onClick={simulateUtterance} disabled={!practiceSession || Boolean(busy)}>
+                <RefreshCw size={18} />
+                模拟一句
+              </button>
+              <button className="ghost wide" onClick={replaySpeech} disabled={!latestAiText}>
+                <Volume2 size={17} />
+                重播上一句
+              </button>
+              <button className="danger wide" onClick={finishSession} disabled={!practiceSession || userTurnCount === 0 || Boolean(busy)}>
+                <Square size={17} />
+                结束训练
               </button>
             </div>
 
-            <div className="tech-fold">🟢 语音链路正常 {speech ? `· ${speech.provider}` : ""}</div>
+            <div className="tech-fold">🟢 WebSocket 对话链路 {speech ? `· TTS ${speech.provider}` : "· 待开始"}</div>
             {speechAudioSrc && (
               <audio
                 className="tts-player"
@@ -676,14 +853,6 @@ export default function App() {
                 aria-label="AI 教练真人语音播放器"
               />
             )}
-            <button className="ghost wide" onClick={replaySpeech}>
-              <Volume2 size={17} />
-              重播 AI
-            </button>
-            <button className="primary wide" onClick={finishSession} disabled={turns.length === 0 || Boolean(busy)}>
-              <BadgeCheck size={18} />
-              结束并生成报告
-            </button>
           </aside>
         </section>
         </>
@@ -718,6 +887,16 @@ export default function App() {
             ))}
           </div>
 
+          <div className="panel report-radar-card">
+            <span className="eyebrow">评分雷达图</span>
+            <AbilityRadar dimensions={report.dimensions} />
+          </div>
+
+          <div className="panel report-conversation-card">
+            <span className="eyebrow">完整对话回放</span>
+            <ConversationLog turns={conversationTurns} />
+          </div>
+
           <div className="panel">
             <span className="eyebrow">{REPORT_COPY.bestFixLabel}</span>
             {report.corrections[0] && (
@@ -738,7 +917,7 @@ export default function App() {
             </ul>
             <div className="control-row">
               <button className="secondary" onClick={() => setScreen("prep")}>换个任务</button>
-              <button className="primary" onClick={startPractice}>再练一轮</button>
+              <button className="primary" onClick={enterPracticeRoom}>再练一轮</button>
             </div>
           </div>
 
@@ -752,6 +931,94 @@ export default function App() {
 
 function isCustomScenario(scenario: Scenario) {
   return scenario.id.startsWith("custom-") || scenario.id.startsWith("custom_");
+}
+
+function formatSeconds(value: number) {
+  const minutes = Math.floor(value / 60);
+  const seconds = value % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function practiceStatusLabel(status: PracticeStatus) {
+  const labels: Record<PracticeStatus, string> = {
+    idle: "待开始",
+    connecting: "连接中",
+    listening: "倾听中",
+    thinking: "生成追问",
+    speaking: "AI 播报",
+    paused: "已暂停",
+    completed: "已结束"
+  };
+  return labels[status];
+}
+
+function AbilityRadar({ dimensions }: { dimensions: ReportResult["dimensions"] }) {
+  const size = 238;
+  const center = size / 2;
+  const maxRadius = 78;
+  const angleStep = (Math.PI * 2) / dimensions.length;
+  const points = dimensions.map((dimension, index) => {
+    const angle = -Math.PI / 2 + angleStep * index;
+    const radius = (dimension.score / 100) * maxRadius;
+    return `${center + Math.cos(angle) * radius},${center + Math.sin(angle) * radius}`;
+  });
+
+  const grid = [0.33, 0.66, 1].map((scale) =>
+    dimensions
+      .map((_, index) => {
+        const angle = -Math.PI / 2 + angleStep * index;
+        return `${center + Math.cos(angle) * maxRadius * scale},${center + Math.sin(angle) * maxRadius * scale}`;
+      })
+      .join(" ")
+  );
+
+  return (
+    <div className="radar-wrap">
+      <svg viewBox={`0 0 ${size} ${size}`} role="img" aria-label="七维口语评分雷达图">
+        {grid.map((polygon) => (
+          <polygon className="radar-grid" key={polygon} points={polygon} />
+        ))}
+        {dimensions.map((dimension, index) => {
+          const angle = -Math.PI / 2 + angleStep * index;
+          const x = center + Math.cos(angle) * (maxRadius + 26);
+          const y = center + Math.sin(angle) * (maxRadius + 26);
+          return (
+            <g key={dimension.id}>
+              <line
+                className="radar-axis"
+                x1={center}
+                y1={center}
+                x2={center + Math.cos(angle) * maxRadius}
+                y2={center + Math.sin(angle) * maxRadius}
+              />
+              <text x={x} y={y} textAnchor="middle" dominantBaseline="middle">
+                {dimension.labelZh.replace("度", "")}
+              </text>
+            </g>
+          );
+        })}
+        <polygon className="radar-score" points={points.join(" ")} />
+      </svg>
+    </div>
+  );
+}
+
+function ConversationLog({ turns }: { turns: ConversationTurn[] }) {
+  if (turns.length === 0) {
+    return <p className="muted">本次报告暂无对话记录。</p>;
+  }
+
+  return (
+    <div className="conversation-log">
+      {turns.map((turn) => (
+        <article className={`conversation-row ${turn.speaker}`} key={turn.id}>
+          <span>{turn.speaker === "ai" ? "AI" : turn.speaker === "user" ? "You" : "System"}</span>
+          <p>{turn.text}</p>
+          <small>{new Date(turn.timestamp).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</small>
+        </article>
+      ))}
+    </div>
+  );
 }
 
 function createJourneySteps({
@@ -795,7 +1062,7 @@ function createJourneySteps({
     },
     {
       label: "课后总结",
-      detail: "五维评分、推荐表达、下一轮目标",
+      detail: "七维评分、推荐表达、下一次目标",
       status: hasReport ? "done" : reportActive ? "active" : "waiting"
     }
   ];
@@ -945,7 +1212,7 @@ function LearningHistoryPanel({
         {recent.map((record) => (
           <article key={record.reportId}>
             <strong>{record.scenarioNameZh} · {record.taskTitleZh}</strong>
-            <span>{record.score} 分 / {record.roundCount} 轮 / {record.correctionCount} 条纠错</span>
+            <span>{record.score} 分 / {record.roundCount} 句回答 / {record.correctionCount} 条纠错</span>
             <small>{record.nextGoal}</small>
           </article>
         ))}

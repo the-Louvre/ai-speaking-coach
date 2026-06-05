@@ -521,11 +521,13 @@ function normalizeReportJson(json: unknown, provider: string): Record<string, un
   const raw = json as Record<string, unknown>;
   const dimensionsRaw = raw.dimensions;
   const dimensionFallbacks = {
-    pronunciation: { labelZh: "发音清晰度", labelEn: "Pronunciation" },
     fluency: { labelZh: "流利度", labelEn: "Fluency" },
+    pronunciation: { labelZh: "发音清晰度", labelEn: "Pronunciation" },
     grammar: { labelZh: "语法准确度", labelEn: "Grammar" },
-    expression: { labelZh: "表达自然度", labelEn: "Expression" },
-    taskCompletion: { labelZh: "任务完成度", labelEn: "Task Completion" }
+    vocabulary: { labelZh: "词汇准确度", labelEn: "Vocabulary" },
+    coherence: { labelZh: "连贯性", labelEn: "Coherence" },
+    task_completion: { labelZh: "任务完成度", labelEn: "Task Completion" },
+    interaction: { labelZh: "互动回应", labelEn: "Interaction" }
   } as const;
   const dimensions = Array.isArray(dimensionsRaw)
     ? dimensionsRaw
@@ -642,7 +644,8 @@ export async function generateReportWithLlm(
         "Generate a Chinese-first English speaking practice report.",
         "Return one strict JSON object only. Do not include Markdown.",
         "The JSON keys must be reportId, totalScore, dimensions, summaryZh, corrections, suggestions, coachCommentZh, provider.",
-        "dimensions must include pronunciation, fluency, grammar, expression, taskCompletion.",
+        "dimensions must include fluency, pronunciation, grammar, vocabulary, coherence, task_completion, interaction.",
+        "Score the whole conversation, not a single isolated answer.",
         `provider must be ${config.llmProvider}.`
       ].join(" "),
       JSON.stringify(_payload)
