@@ -13,7 +13,7 @@ import type {
   TranscriptResult
 } from "../../shared/schemas";
 import { dialogueTurnResultSchema, reportResultSchema } from "../../shared/schemas";
-import { mockDialogueTurn, mockReport, mockSpeech, mockTranscribe } from "./mockProviders";
+import { mockDialogueTurn, mockReport, mockSpeech, mockTranscribe, type DialogueContextTurn } from "./mockProviders";
 
 export type LiveConfig = {
   apiMode: "mock" | "live";
@@ -21,6 +21,7 @@ export type LiveConfig = {
   asrProvider: AsrProvider;
   asrApiKey?: string;
   deepgramApiKey?: string;
+  assemblyAiApiKey?: string;
   llmProvider: LlmProvider;
   llmApiKey?: string;
   llmBaseUrl?: string;
@@ -37,20 +38,30 @@ export type LiveConfig = {
   cartesiaModel: string;
   cartesiaVoiceId?: string;
   pronunciationProvider: PronunciationProvider;
+  defaultPrompt?: string;
 };
 
-export async function transcribeWithDeepgram(
+function mockAsrFallback(config: LiveConfig, reason?: string): TranscriptResult {
+  return {
+    ...mockTranscribe(),
+    fallbackReason:
+      reason ??
+      (config.asrProvider === "mock"
+        ? "ASR provider is mock"
+        : `${config.asrProvider} ASR live adapter is planned`)
+  };
+}
+
+export async function transcribeWithConfiguredProvider(
   audio: Express.Multer.File | undefined,
   config: LiveConfig
 ): Promise<TranscriptResult> {
+  if (config.asrProvider === "assemblyai") {
+    return transcribeWithAssemblyAi(audio, config);
+  }
+
   if (config.asrProvider !== "deepgram") {
-    return {
-      ...mockTranscribe(),
-      fallbackReason:
-        config.asrProvider === "mock"
-          ? "ASR provider is mock"
-          : `${config.asrProvider} ASR live adapter is planned`
-    };
+    return mockAsrFallback(config);
   }
 
   if (config.apiMode !== "live" || !config.deepgramApiKey || !audio) {
@@ -121,6 +132,123 @@ export async function transcribeWithDeepgram(
   }
 }
 
+export const transcribeWithDeepgram = transcribeWithConfiguredProvider;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function transcribeWithAssemblyAi(
+  audio: Express.Multer.File | undefined,
+  config: LiveConfig
+): Promise<TranscriptResult> {
+  const apiKey = config.assemblyAiApiKey || config.asrApiKey;
+  if (config.apiMode !== "live" || !apiKey || !audio) {
+    return mockAsrFallback(config, !audio ? "No audio uploaded" : "AssemblyAI is not configured");
+  }
+
+  const started = Date.now();
+  try {
+    const uploadResponse = await fetch("https://api.assemblyai.com/v2/upload", {
+      method: "POST",
+      headers: {
+        Authorization: apiKey,
+        "Content-Type": "application/octet-stream"
+      },
+      body: audio.buffer as unknown as BodyInit
+    });
+    if (!uploadResponse.ok) {
+      return mockAsrFallback(config, `AssemblyAI upload ${uploadResponse.status}`);
+    }
+
+    const uploadJson = (await uploadResponse.json()) as { upload_url?: string };
+    if (!uploadJson.upload_url) {
+      return mockAsrFallback(config, "AssemblyAI upload returned no URL");
+    }
+
+    const submitResponse = await fetch("https://api.assemblyai.com/v2/transcript", {
+      method: "POST",
+      headers: {
+        Authorization: apiKey,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        audio_url: uploadJson.upload_url,
+        language_code: "en",
+        punctuate: true,
+        format_text: true
+      })
+    });
+    if (!submitResponse.ok) {
+      return mockAsrFallback(config, `AssemblyAI transcript ${submitResponse.status}`);
+    }
+
+    let transcript = (await submitResponse.json()) as AssemblyAiTranscript;
+    const maxPolls = Number(process.env.ASSEMBLYAI_MAX_POLLS || 30);
+    const pollIntervalMs = Number(process.env.ASSEMBLYAI_POLL_INTERVAL_MS || 1000);
+    for (let attempt = 0; attempt < maxPolls && transcript.status !== "completed"; attempt += 1) {
+      if (transcript.status === "error") {
+        return mockAsrFallback(config, transcript.error || "AssemblyAI transcript failed");
+      }
+      if (!transcript.id) break;
+      await sleep(pollIntervalMs);
+      const pollResponse = await fetch(`https://api.assemblyai.com/v2/transcript/${transcript.id}`, {
+        headers: { Authorization: apiKey }
+      });
+      if (!pollResponse.ok) {
+        return mockAsrFallback(config, `AssemblyAI poll ${pollResponse.status}`);
+      }
+      transcript = (await pollResponse.json()) as AssemblyAiTranscript;
+    }
+
+    if (transcript.status !== "completed") {
+      return mockAsrFallback(config, "AssemblyAI transcript timed out");
+    }
+
+    return {
+      text: transcript.text || "",
+      confidence: transcript.confidence ?? averageConfidence(transcript.words),
+      words:
+        transcript.words?.map((word) => ({
+          word: word.text,
+          start: msToSeconds(word.start),
+          end: msToSeconds(word.end),
+          confidence: word.confidence,
+          punctuatedWord: word.text
+        })) ?? [],
+      durationSec: transcript.audio_duration ?? 0,
+      providerLatencyMs: Date.now() - started,
+      provider: "assemblyai"
+    };
+  } catch (error) {
+    return mockAsrFallback(config, error instanceof Error ? error.message : "AssemblyAI request failed");
+  }
+}
+
+type AssemblyAiTranscript = {
+  id?: string;
+  status?: "queued" | "processing" | "completed" | "error";
+  text?: string;
+  confidence?: number;
+  audio_duration?: number;
+  error?: string;
+  words?: Array<{
+    text: string;
+    start: number;
+    end: number;
+    confidence: number;
+  }>;
+};
+
+function msToSeconds(value: number) {
+  return Math.round((value / 1000) * 1000) / 1000;
+}
+
+function averageConfidence(words: AssemblyAiTranscript["words"]) {
+  if (!words?.length) return 0;
+  return words.reduce((sum, word) => sum + word.confidence, 0) / words.length;
+}
+
 function parseJsonContent(content: string): unknown {
   const trimmed = content.trim();
   const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
@@ -155,7 +283,7 @@ async function createJsonChatCompletion(
     model: config.llmModel,
     temperature: 0.4,
     messages: [
-      { role: "system", content: system },
+      { role: "system", content: [config.defaultPrompt, system].filter(Boolean).join("\n\n") },
       { role: "user", content: user }
     ]
   });
@@ -175,12 +303,14 @@ export async function generateTurnWithLlm(
     taskFocus?: string;
     aiRoleZh?: string;
     round: number;
+    currentAiText?: string;
     userText: string;
+    turns?: DialogueContextTurn[];
   },
   config: LiveConfig
 ): Promise<DialogueTurnResult> {
   if (config.apiMode !== "live" || !config.llmApiKey) {
-    return mockDialogueTurn(input.userText, input.round);
+    return mockDialogueTurn(input.userText, input.round, input);
   }
 
   try {
@@ -198,8 +328,11 @@ Task: ${input.taskTitle || input.taskId}
 AI role: ${input.aiRoleZh || "AI speaking coach"}
 Learning focus: ${input.taskFocus || "help the learner answer clearly and naturally"}
 Round: ${input.round}
+Conversation so far:
+${formatConversation(input.turns)}
+Current AI question: ${input.currentAiText || "(not provided)"}
 User answer: ${input.userText}
-Return a concise next question in English and a coaching hint in Chinese.`
+Return a concise next question in English and a coaching hint in Chinese. The next question must be different from every AI question in the conversation and from the current AI question.`
     );
 
     return dialogueTurnResultSchema.parse({
@@ -208,8 +341,15 @@ Return a concise next question in English and a coaching hint in Chinese.`
       provider: config.llmProvider
     });
   } catch {
-    return mockDialogueTurn(input.userText, input.round);
+    return mockDialogueTurn(input.userText, input.round, input);
   }
+}
+
+function formatConversation(turns: DialogueContextTurn[] | undefined) {
+  if (!turns?.length) return "(none)";
+  return turns
+    .map((turn) => `Round ${turn.round}\nAI: ${turn.aiText}\nLearner: ${turn.userText}`)
+    .join("\n\n");
 }
 
 export async function synthesizeWithCartesia(

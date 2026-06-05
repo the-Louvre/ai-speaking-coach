@@ -6,6 +6,12 @@ import type {
 } from "../../shared/schemas";
 import { findScenarioTask } from "../data";
 
+export type DialogueContextTurn = {
+  round: number;
+  aiText: string;
+  userText: string;
+};
+
 export function mockStartSession(scenarioId: string, taskId: string) {
   const { task } = findScenarioTask(scenarioId, taskId);
 
@@ -51,13 +57,34 @@ export function mockTranscribe(): TranscriptResult {
   };
 }
 
-export function mockDialogueTurn(userText: string, round: number): DialogueTurnResult {
+export function mockDialogueTurn(
+  userText: string,
+  round: number,
+  context: { currentAiText?: string; turns?: DialogueContextTurn[] } = {}
+): DialogueTurnResult {
   const resultWord = /result|improved|increase|reduced|saved|score/i.test(userText)
     ? "Good. Now make the result measurable with one number."
     : "What result did your work create for users or the team?";
+  const followUps = [
+    resultWord,
+    "Can you give one concrete example of how a student used it?",
+    "What was the hardest trade-off you made while building it?",
+    "How would you improve it if you had one more month?",
+    "Great. Please summarize your answer in two confident sentences."
+  ];
+  const askedQuestions = new Set(
+    [context.currentAiText, ...(context.turns ?? []).map((turn) => turn.aiText)]
+      .filter((text): text is string => Boolean(text))
+      .map((text) => text.trim().toLowerCase())
+  );
+  const preferred = followUps[Math.max(0, Math.min(round - 1, followUps.length - 1))];
+  const aiText =
+    askedQuestions.has(preferred.toLowerCase())
+      ? followUps.find((question) => !askedQuestions.has(question.toLowerCase())) ?? preferred
+      : preferred;
 
   return {
-    aiText: resultWord,
+    aiText,
     hintZh: "回答要更具体：先说结果，再补数字或用户影响。",
     coachState: "asking",
     correctionPreview:

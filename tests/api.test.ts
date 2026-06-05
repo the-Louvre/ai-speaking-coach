@@ -94,6 +94,42 @@ describe("local API in mock mode", () => {
     expect(speech.body.audioBase64).toBeTruthy();
   });
 
+  it("advances follow-up questions across repeated mock turns", async () => {
+    const first = await request(app)
+      .post("/api/llm/turn")
+      .send({
+        sessionId: "session_test",
+        scenarioId: "interview",
+        taskId: "internship-intro",
+        round: 1,
+        currentAiText: "Tell me about one project you are proud of.",
+        userText: "I built a campus navigation app and improved the route flow."
+      })
+      .expect(200);
+
+    const second = await request(app)
+      .post("/api/llm/turn")
+      .send({
+        sessionId: "session_test",
+        scenarioId: "interview",
+        taskId: "internship-intro",
+        round: 2,
+        currentAiText: first.body.aiText,
+        userText: "It improved planning speed by 20 percent for students.",
+        turns: [
+          {
+            round: 1,
+            aiText: "Tell me about one project you are proud of.",
+            userText: "I built a campus navigation app and improved the route flow."
+          }
+        ]
+      })
+      .expect(200);
+
+    expect(second.body.aiText).not.toBe(first.body.aiText);
+    expect(second.body.aiText).toContain("example");
+  });
+
   it("generates a report that matches the public schema", async () => {
     const response = await request(app)
       .post("/api/report/generate")

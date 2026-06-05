@@ -64,6 +64,7 @@ const PRESETS = [
 const ASR_OPTIONS = [
   ["mock", "Mock 演示转写"],
   ["deepgram", "Deepgram Nova-3"],
+  ["assemblyai", "AssemblyAI"],
   ["aliyun-isi", "阿里云智能语音"],
   ["iflytek", "讯飞语音识别"]
 ];

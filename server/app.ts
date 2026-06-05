@@ -14,7 +14,7 @@ import {
   generateReportWithLlm,
   generateTurnWithLlm,
   synthesizeWithCartesia,
-  transcribeWithDeepgram
+  transcribeWithConfiguredProvider
 } from "./providers/liveProviders";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
@@ -41,6 +41,23 @@ function normalizeCustomScenario(value: unknown): Scenario | null {
       }
     ]
   };
+}
+
+function normalizeTurns(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((turn) => {
+      if (!turn || typeof turn !== "object") return null;
+      const item = turn as Record<string, unknown>;
+      return {
+        round: Number(item.round || 0),
+        aiText: String(item.aiText || ""),
+        userText: String(item.userText || "")
+      };
+    })
+    .filter((turn): turn is { round: number; aiText: string; userText: string } =>
+      Boolean(turn?.round && turn.aiText.trim() && turn.userText.trim())
+    );
 }
 
 export function createApp(options: AppOptions = {}) {
@@ -86,7 +103,7 @@ export function createApp(options: AppOptions = {}) {
   });
 
   app.post("/api/asr/transcribe", upload.single("audio"), async (req, res) => {
-    const result = await transcribeWithDeepgram(req.file, config);
+    const result = await transcribeWithConfiguredProvider(req.file, config);
     res.json(result);
   });
 
@@ -100,7 +117,9 @@ export function createApp(options: AppOptions = {}) {
         taskFocus: String(req.body?.taskFocus || ""),
         aiRoleZh: String(req.body?.aiRoleZh || ""),
         round: Number(req.body?.round || 1),
-        userText: String(req.body?.userText || "")
+        currentAiText: String(req.body?.currentAiText || ""),
+        userText: String(req.body?.userText || ""),
+        turns: normalizeTurns(req.body?.turns)
       },
       config
     );

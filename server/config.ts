@@ -1,8 +1,9 @@
 import type { LiveConfig } from "./providers/liveProviders";
 import "./env";
+import { readFileSync } from "node:fs";
 
 export type ProviderPreset = "global-mixed" | "china-qwen" | "custom";
-export type AsrProvider = "mock" | "deepgram" | "aliyun-isi" | "iflytek";
+export type AsrProvider = "mock" | "deepgram" | "assemblyai" | "aliyun-isi" | "iflytek";
 export type LlmProvider = "openai" | "qwen" | "doubao" | "kimi" | "custom-openai-compatible";
 export type TtsProvider = "mock" | "cartesia" | "aliyun-isi" | "iflytek";
 export type PronunciationProvider = "rule" | "iflytek";
@@ -17,6 +18,7 @@ export type RuntimeSettingsInput = {
   asrProvider?: AsrProvider;
   asrApiKey?: string;
   deepgramApiKey?: string;
+  assemblyAiApiKey?: string;
   llmProvider?: LlmProvider;
   llmApiKey?: string;
   llmBaseUrl?: string;
@@ -92,7 +94,9 @@ function readProviderPreset(value: string | undefined): ProviderPreset {
 }
 
 function readAsrProvider(value: string | undefined, fallback: AsrProvider): AsrProvider {
-  return isOneOf(value, ["mock", "deepgram", "aliyun-isi", "iflytek"] as const) ? value : fallback;
+  return isOneOf(value, ["mock", "deepgram", "assemblyai", "aliyun-isi", "iflytek"] as const)
+    ? value
+    : fallback;
 }
 
 function readLlmProvider(value: string | undefined, fallback: LlmProvider): LlmProvider {
@@ -120,6 +124,16 @@ function readLlmApiKey(provider: LlmProvider): string | undefined {
   return process.env.OPENAI_API_KEY;
 }
 
+function readDefaultPrompt(): string | undefined {
+  if (process.env.DEFAULT_PROMPT) return process.env.DEFAULT_PROMPT;
+  if (!process.env.DEFAULT_PROMPT_PATH) return undefined;
+  try {
+    return readFileSync(process.env.DEFAULT_PROMPT_PATH, "utf8").trim();
+  } catch {
+    return undefined;
+  }
+}
+
 export function getConfig(options: AppOptions = {}): LiveConfig {
   const apiMode = options.apiMode ?? (process.env.API_MODE === "live" ? "live" : "mock");
   const providerPreset = readProviderPreset(process.env.API_PROVIDER_PRESET);
@@ -134,6 +148,7 @@ export function getConfig(options: AppOptions = {}): LiveConfig {
     asrProvider: readAsrProvider(process.env.ASR_PROVIDER, preset.asrProvider),
     asrApiKey: process.env.ASR_API_KEY || process.env.DEEPGRAM_API_KEY,
     deepgramApiKey: process.env.DEEPGRAM_API_KEY || process.env.ASR_API_KEY,
+    assemblyAiApiKey: process.env.ASSEMBLYAI_API_KEY || process.env.ASR_API_KEY,
     llmProvider,
     llmApiKey: readLlmApiKey(llmProvider),
     llmBaseUrl: process.env.LLM_BASE_URL ?? preset.llmBaseUrl,
@@ -152,7 +167,8 @@ export function getConfig(options: AppOptions = {}): LiveConfig {
     pronunciationProvider: readPronunciationProvider(
       process.env.PRONUNCIATION_PROVIDER,
       preset.pronunciationProvider
-    )
+    ),
+    defaultPrompt: readDefaultPrompt()
   };
 }
 
@@ -181,6 +197,7 @@ export function applyRuntimeSettings(config: LiveConfig, input: RuntimeSettingsI
 
   const asrApiKey = cleanValue(input.asrApiKey);
   const deepgramApiKey = cleanValue(input.deepgramApiKey);
+  const assemblyAiApiKey = cleanValue(input.assemblyAiApiKey);
   const llmApiKey = cleanValue(input.llmApiKey);
   const llmBaseUrl = cleanValue(input.llmBaseUrl);
   const llmModel = cleanValue(input.llmModel);
@@ -192,9 +209,10 @@ export function applyRuntimeSettings(config: LiveConfig, input: RuntimeSettingsI
   const cartesiaModel = cleanValue(input.cartesiaModel);
   const cartesiaVoiceId = cleanValue(input.cartesiaVoiceId);
 
-  if (asrApiKey || deepgramApiKey) {
-    config.asrApiKey = asrApiKey || deepgramApiKey;
+  if (asrApiKey || deepgramApiKey || assemblyAiApiKey) {
+    config.asrApiKey = asrApiKey || deepgramApiKey || assemblyAiApiKey;
     config.deepgramApiKey = deepgramApiKey || asrApiKey;
+    config.assemblyAiApiKey = assemblyAiApiKey || asrApiKey;
   }
   if (llmApiKey || openaiApiKey) {
     config.llmApiKey = llmApiKey || openaiApiKey;
@@ -249,8 +267,11 @@ export function getRuntimeSettings(config: LiveConfig) {
 
 export function getHealth(config: LiveConfig) {
   const asrIsMock = config.asrProvider === "mock";
-  const asrIsReady = asrIsMock || (config.asrProvider === "deepgram" && Boolean(config.deepgramApiKey));
-  const asrIsImplemented = asrIsMock || config.asrProvider === "deepgram";
+  const asrIsReady =
+    asrIsMock ||
+    (config.asrProvider === "deepgram" && Boolean(config.deepgramApiKey)) ||
+    (config.asrProvider === "assemblyai" && Boolean(config.assemblyAiApiKey || config.asrApiKey));
+  const asrIsImplemented = asrIsMock || config.asrProvider === "deepgram" || config.asrProvider === "assemblyai";
   const ttsIsMock = config.ttsProvider === "mock";
   const ttsIsReady =
     ttsIsMock || (config.ttsProvider === "cartesia" && Boolean(config.ttsApiKey && config.ttsVoiceId));
@@ -294,6 +315,10 @@ export function getHealth(config: LiveConfig) {
       deepgram: {
         configured: Boolean(config.deepgramApiKey),
         active: config.apiMode === "live" && Boolean(config.deepgramApiKey)
+      },
+      assemblyai: {
+        configured: Boolean(config.assemblyAiApiKey || config.asrApiKey),
+        active: config.apiMode === "live" && Boolean(config.assemblyAiApiKey || config.asrApiKey)
       },
       openai: {
         configured: Boolean(config.llmApiKey),

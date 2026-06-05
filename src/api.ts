@@ -31,6 +31,7 @@ export type HealthResult = {
     tts: { provider: string; configured: boolean; active: boolean; model: string; status: string };
     pronunciation: { provider: string; configured: boolean; active: boolean; status: string };
     deepgram: { configured: boolean; active: boolean };
+    assemblyai: { configured: boolean; active: boolean };
     openai: { configured: boolean; active: boolean; model: string };
     cartesia: { configured: boolean; active: boolean; model: string };
   };
@@ -62,6 +63,7 @@ export type RuntimeSettingsInput = {
   asrProvider?: string;
   asrApiKey?: string;
   deepgramApiKey?: string;
+  assemblyAiApiKey?: string;
   llmProvider?: string;
   llmApiKey?: string;
   llmBaseUrl?: string;
@@ -120,7 +122,13 @@ export const api = {
     taskFocus?: string;
     aiRoleZh?: string;
     round: number;
+    currentAiText?: string;
     userText: string;
+    turns?: Array<{
+      round: number;
+      aiText: string;
+      userText: string;
+    }>;
   }) =>
     requestJson<DialogueTurnResult>("/api/llm/turn", {
       method: "POST",

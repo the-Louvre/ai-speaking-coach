@@ -227,7 +227,9 @@ export default function App() {
       taskFocus: task.focus,
       aiRoleZh: task.aiRoleZh,
       round: currentRound,
-      userText: draft
+      currentAiText: latestAiText,
+      userText: draft,
+      turns
     });
     const speechResult = await api.synthesize(turnResult.aiText);
     setTurns((items) => [

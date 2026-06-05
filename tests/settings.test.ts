@@ -1,9 +1,20 @@
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../server/app";
 
 describe("runtime API settings", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("defaults to the China-first preset while staying in mock mode", async () => {
+    vi.stubEnv("API_PROVIDER_PRESET", "china-qwen");
+    vi.stubEnv("ASR_PROVIDER", "mock");
+    vi.stubEnv("LLM_PROVIDER", "qwen");
+    vi.stubEnv("LLM_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1");
+    vi.stubEnv("LLM_MODEL", "qwen-plus");
+    vi.stubEnv("TTS_PROVIDER", "mock");
+    vi.stubEnv("TTS_MODEL", "mock");
     const app = createApp({ apiMode: "mock" });
 
     const settings = await request(app).get("/api/settings").expect(200);
