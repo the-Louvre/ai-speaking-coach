@@ -17,6 +17,7 @@ import type { CoachState, DialogueTurnResult, ReportResult, SpeechAudioResult } 
 import type { Scenario } from "../server/data";
 import { api, type HealthResult, type SessionStart } from "./api";
 import { ApiSettingsPanel } from "./components/ApiSettingsPanel";
+import { BrandGuideSections, BrandTopBar, GuideCardGrid } from "./components/BrandGuidelines";
 import { CoachAvatar } from "./components/CoachAvatar";
 import { WeekDots } from "./components/WeekDots";
 import { getShanghaiDate, type CheckinState } from "./domain/checkin";
@@ -215,11 +216,16 @@ export default function App() {
   }
 
   return (
-    <main className="app-shell">
+    <>
+      <BrandTopBar />
+      <main className="app-shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">AI Speaking Coach</p>
-          <h1>英语口语场景冲刺</h1>
+          <p className="eyebrow">AI Speaking Coach · lingo coach</p>
+          <h1>
+            <span>像每日闯关</span>
+            <span>一样练英语口语</span>
+          </h1>
         </div>
         <div className="top-actions">
           <div className="api-pill">
@@ -270,6 +276,8 @@ export default function App() {
             <WeekDots checkin={checkin} />
           </div>
 
+          <GuideCardGrid onStartPractice={() => setScreen("prep")} onOpenSettings={() => setSettingsOpen(true)} />
+
           <div className="scenario-list">
             {scenarios.map((item) => (
               <button
@@ -287,6 +295,8 @@ export default function App() {
               </button>
             ))}
           </div>
+
+          <BrandGuideSections />
         </section>
       )}
 
@@ -449,6 +459,7 @@ export default function App() {
           </div>
         </section>
       )}
-    </main>
+      </main>
+    </>
   );
 }
