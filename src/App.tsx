@@ -22,10 +22,12 @@ import type { CoachState, DialogueTurnResult, ReportResult, SpeechAudioResult } 
 import type { Scenario } from "../server/data";
 import { api, type HealthResult, type SessionStart } from "./api";
 import { ApiSettingsPanel } from "./components/ApiSettingsPanel";
-import { BrandGuideSections, BrandTopBar, GuideCardGrid } from "./components/BrandGuidelines";
+import { BrandTopBar } from "./components/BrandGuidelines";
 import { CoachAvatar } from "./components/CoachAvatar";
 import { WeekDots } from "./components/WeekDots";
+import { HOME_COPY, VALUE_CARDS } from "./copy/coachCopy";
 import { getShanghaiDate, type CheckinState } from "./domain/checkin";
+import { GROWTH_MOCK } from "./domain/growthMock";
 import {
   completeToday,
   loadCheckin,
@@ -441,51 +443,96 @@ export default function App() {
 
       {screen === "home" && (
         <section className="home-grid">
-          <div className="panel hero-panel">
-            <div className="hero-copy">
-              <p className="eyebrow">今日任务</p>
-              <h2>{todayDone ? "今日已点亮，可以继续加练" : "先完成一轮 5 分钟训练"}</h2>
-              <p>{coachLine}</p>
-              <div className="action-row">
-                <button className="primary" onClick={() => setScreen("prep")}>
+          <div className="home-hero">
+            <section className="panel home-task">
+              <span className="eyebrow">今日任务</span>
+              <h2>{HOME_COPY.title}</h2>
+              <p className="muted">{HOME_COPY.subtitle}</p>
+              <div className="goal-box">本轮目标：{task.focus}</div>
+              <div className="top-actions">
+                <button className="primary" onClick={startPractice}>
                   <Play size={18} />
-                  {todayDone ? "再练一轮" : "开始今日练习"}
+                  {HOME_COPY.startButton}
                 </button>
+                <button className="secondary" onClick={() => setScreen("prep")}>
+                  {HOME_COPY.changeScene}
+                </button>
+                {report && (
+                  <button className="secondary" onClick={() => setScreen("report")}>
+                    {HOME_COPY.lastReport}
+                  </button>
+                )}
               </div>
-            </div>
-            <CoachAvatar state={coachState} />
+              <p className="muted low-pressure-note">{HOME_COPY.lowPressureNote}</p>
+            </section>
+
+            <section className="panel home-coach">
+              <div className="home-bubble">Ready for a 5-minute practice?</div>
+              <CoachAvatar state={coachState === "idle" ? "idle" : coachState} size={240} />
+            </section>
+
+            <section className="panel home-growth">
+              <span className="eyebrow">我的成长轨迹</span>
+              <div className="growth-row">
+                <span className="muted">连续练习</span>
+                <span className="growth-big">{GROWTH_MOCK.streakDays} 天</span>
+              </div>
+              <div className="growth-row">
+                <span className="muted">累计口语时间</span>
+                <strong>{GROWTH_MOCK.totalMinutes} 分钟</strong>
+              </div>
+              <div className="growth-row">
+                <span className="muted">最近得分</span>
+                <strong>{GROWTH_MOCK.lastScore}</strong>
+              </div>
+              <div className="growth-row">
+                <span className="muted">当前薄弱项</span>
+                <span className="pill">{GROWTH_MOCK.weakAreaZh}</span>
+              </div>
+              <div className="next-target">
+                推荐下一练：{GROWTH_MOCK.nextPracticeZh}
+                <br />
+                {GROWTH_MOCK.nextTipZh}
+              </div>
+            </section>
           </div>
 
-          <LearningJourneyCard
-            checkin={checkin}
-            latestRecord={latestLearningRecord}
-            scenario={scenario}
-            task={task}
-            steps={journeySteps}
-            summary={learningSummary}
-          />
-
-          <GuideCardGrid onStartPractice={() => setScreen("prep")} />
-
-          <div className="scenario-list">
-            {scenarios.map((item) => (
-              <button
-                key={item.id}
-                className={`scenario-card ${scenario.id === item.id ? "selected" : ""}`}
-                onClick={() => {
-                  setScenario(item);
-                  setTask(item.tasks[0]);
-                }}
-              >
-                <strong>
-                  {item.nameZh} <span>{item.nameEn}</span>
-                </strong>
-                <p>{item.descriptionZh}</p>
-              </button>
+          <span className="eyebrow section-kicker">为什么用 lingo coach</span>
+          <div className="value-row">
+            {VALUE_CARDS.map((value) => (
+              <div className="value-card" key={value.titleZh}>
+                <div className="value-icon">{value.icon}</div>
+                <strong>{value.titleZh}</strong>
+                <p className="muted">{value.descZh}</p>
+              </div>
             ))}
           </div>
 
-          <BrandGuideSections />
+          <span className="eyebrow section-kicker">选择真实场景</span>
+          <div className="scene-grid">
+            {scenarios.slice(0, 3).map((item, index) => (
+              <button
+                type="button"
+                className="scene-card"
+                key={item.id}
+                style={{ background: ["#58CC02", "#1CB0F6", "#CE82FF"][index % 3] }}
+                onClick={() => {
+                  setScenario(item);
+                  setTask(item.tasks[0]);
+                  setScreen("prep");
+                }}
+              >
+                <h3>{item.nameZh}</h3>
+                <div className="scene-meta">{item.tasks[0]?.focus}</div>
+                <div className="scene-go">开始练习</div>
+              </button>
+            ))}
+            <button type="button" className="scene-card custom" onClick={() => setScreen("prep")}>
+              <div className="plus">+</div>
+              <h3>自定义场景</h3>
+              <div className="scene-meta">自己设定 AI 角色、任务与开场问题</div>
+            </button>
+          </div>
         </section>
       )}
 
