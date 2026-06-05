@@ -25,7 +25,7 @@ import { ApiSettingsPanel } from "./components/ApiSettingsPanel";
 import { BrandTopBar } from "./components/BrandGuidelines";
 import { CoachAvatar } from "./components/CoachAvatar";
 import { WeekDots } from "./components/WeekDots";
-import { HOME_COPY, VALUE_CARDS } from "./copy/coachCopy";
+import { HOME_COPY, REPORT_COPY, VALUE_CARDS } from "./copy/coachCopy";
 import { getShanghaiDate, type CheckinState } from "./domain/checkin";
 import { GROWTH_MOCK } from "./domain/growthMock";
 import {
@@ -653,47 +653,49 @@ export default function App() {
 
       {screen === "report" && report && (
         <section className="report-grid">
-          <div className="panel report-summary">
-            <p className="eyebrow">Session Report</p>
-            <h2>{report.totalScore}</h2>
-            <p>{report.summaryZh}</p>
-            <div className="checkin-banner">
-              <BadgeCheck size={20} />
-              今日已完成，连续练习 {checkin.currentStreak} 天
+          <div className="score-hero">
+            <div>
+              <div className="score-num">{report.totalScore}</div>
+              <div className="score-denom">/ 100</div>
             </div>
-            <WeekDots checkin={checkin} />
+            <div>
+              <span className="eyebrow">本次练习 · {scenario.nameZh}</span>
+              <h2>{report.coachCommentZh}</h2>
+              <p>完成目标：{task.focus}</p>
+            </div>
           </div>
 
           <div className="panel">
-            <CoachAvatar state={coachState} />
-            <p>{report.coachCommentZh}</p>
-          </div>
-
-          <LearningHistoryPanel state={learning} summary={learningSummary} />
-
-          <div className="panel score-grid">
-            {report.dimensions.map((item) => (
-              <div className="score-card" key={item.id}>
-                <strong>{item.score}</strong>
-                <span>{item.labelZh}</span>
-                <small>{item.explanationZh}</small>
+            <span className="eyebrow">{REPORT_COPY.dimensionsLabel}</span>
+            {report.dimensions.map((dimension) => (
+              <div className="dim" key={dimension.id}>
+                <div className="dim-t">
+                  <span>{dimension.labelZh}</span>
+                  <span>{dimension.score}</span>
+                </div>
+                <div className="dim-bar">
+                  <i style={{ width: `${dimension.score}%` }} />
+                </div>
               </div>
             ))}
           </div>
 
-          <div className="panel correction-panel">
-            <h3>逐句纠错</h3>
-            {report.corrections.map((item) => (
-              <div className="correction" key={item.original}>
-                <p><b>原句：</b>{item.original}</p>
-                <p><b>推荐：</b>{item.improved}</p>
-                <small>{item.explanationZh}</small>
-              </div>
-            ))}
-            <h3>下一轮建议</h3>
-            <ul>
-              {report.suggestions.map((item) => (
-                <li key={item}>{item}</li>
+          <div className="panel">
+            <span className="eyebrow">{REPORT_COPY.bestFixLabel}</span>
+            {report.corrections[0] && (
+              <>
+                <p className="fix-orig">Original: {report.corrections[0].original}</p>
+                <p className="fix-better">Better: {report.corrections[0].improved}</p>
+                <p className="muted">{report.corrections[0].explanationZh}</p>
+              </>
+            )}
+          </div>
+
+          <div className="panel">
+            <span className="eyebrow">{REPORT_COPY.replayLabel}</span>
+            <ul className="replay-list">
+              {report.suggestions.map((suggestion) => (
+                <li className="replay-li" key={suggestion}>{suggestion}</li>
               ))}
             </ul>
             <div className="control-row">
@@ -701,6 +703,8 @@ export default function App() {
               <button className="primary" onClick={startPractice}>再练一轮</button>
             </div>
           </div>
+
+          <div className="encourage">🌱 {report.summaryZh}</div>
         </section>
       )}
       </main>
