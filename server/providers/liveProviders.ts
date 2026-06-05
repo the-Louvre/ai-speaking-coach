@@ -48,6 +48,10 @@ export async function transcribeWithDeepgram(
     return transcribeWithQwen(audio, config);
   }
 
+  if (config.asrProvider === "assemblyai") {
+    return transcribeWithAssemblyAi(audio, config);
+  }
+
   if (config.asrProvider !== "deepgram") {
     return {
       ...mockTranscribe(),
@@ -122,6 +126,118 @@ export async function transcribeWithDeepgram(
     return {
       ...mockTranscribe(),
       fallbackReason: error instanceof Error ? error.message : "Deepgram request failed"
+    };
+  }
+}
+
+async function transcribeWithAssemblyAi(
+  audio: Express.Multer.File | undefined,
+  config: LiveConfig
+): Promise<TranscriptResult> {
+  if (config.apiMode !== "live" || !config.asrApiKey || !audio) {
+    return {
+      ...mockTranscribe(),
+      fallbackReason: !audio ? "No audio uploaded" : "AssemblyAI ASR is not configured"
+    };
+  }
+
+  const started = Date.now();
+  try {
+    const uploadResponse = await fetch("https://api.assemblyai.com/v2/upload", {
+      method: "POST",
+      headers: {
+        Authorization: config.asrApiKey,
+        "Content-Type": "application/octet-stream"
+      },
+      body: audio.buffer as unknown as BodyInit
+    });
+
+    if (!uploadResponse.ok) {
+      return { ...mockTranscribe(), fallbackReason: `AssemblyAI upload ${uploadResponse.status}` };
+    }
+
+    const uploadJson = (await uploadResponse.json()) as { upload_url?: string };
+    if (!uploadJson.upload_url) {
+      return { ...mockTranscribe(), fallbackReason: "AssemblyAI upload returned no URL" };
+    }
+
+    const transcriptResponse = await fetch("https://api.assemblyai.com/v2/transcript", {
+      method: "POST",
+      headers: {
+        Authorization: config.asrApiKey,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        audio_url: uploadJson.upload_url,
+        language_code: "en_us",
+        punctuate: true,
+        format_text: true,
+        speech_models: [config.asrModel || "universal-3-pro"]
+      })
+    });
+
+    if (!transcriptResponse.ok) {
+      const errorText = await transcriptResponse.text();
+      return {
+        ...mockTranscribe(),
+        fallbackReason: `AssemblyAI transcript ${transcriptResponse.status}: ${errorText.slice(0, 180)}`
+      };
+    }
+
+    const transcriptJson = (await transcriptResponse.json()) as { id?: string };
+    if (!transcriptJson.id) {
+      return { ...mockTranscribe(), fallbackReason: "AssemblyAI transcript returned no ID" };
+    }
+
+    let transcript: {
+      status?: string;
+      text?: string;
+      confidence?: number;
+      audio_duration?: number;
+      words?: Array<{ text?: string; start?: number; end?: number; confidence?: number }>;
+      error?: string;
+    } = {};
+
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const pollResponse = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptJson.id}`, {
+        headers: { Authorization: config.asrApiKey }
+      });
+
+      if (!pollResponse.ok) {
+        return { ...mockTranscribe(), fallbackReason: `AssemblyAI poll ${pollResponse.status}` };
+      }
+
+      transcript = await pollResponse.json();
+      if (transcript.status === "completed" || transcript.status === "error") break;
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+    }
+
+    if (transcript.status !== "completed") {
+      return {
+        ...mockTranscribe(),
+        fallbackReason: transcript.error || `AssemblyAI status ${transcript.status || "timeout"}`
+      };
+    }
+
+    return {
+      text: transcript.text || "",
+      confidence: transcript.confidence ?? 0,
+      words:
+        transcript.words?.map((word) => ({
+          word: (word.text || "").toLowerCase().replace(/[^a-z'-]/gi, ""),
+          punctuatedWord: word.text || "",
+          start: (word.start ?? 0) / 1000,
+          end: (word.end ?? 0) / 1000,
+          confidence: word.confidence ?? transcript.confidence ?? 0
+        })) ?? [],
+      durationSec: transcript.audio_duration ?? 0,
+      providerLatencyMs: Date.now() - started,
+      provider: "assemblyai"
+    };
+  } catch (error) {
+    return {
+      ...mockTranscribe(),
+      fallbackReason: error instanceof Error ? error.message : "AssemblyAI request failed"
     };
   }
 }
@@ -336,13 +452,17 @@ export async function synthesizeWithCartesia(
         model_id: config.ttsModel,
         transcript: text,
         voice: { id: config.ttsVoiceId },
-        output_format: { container: "mp3" },
+        output_format: { container: "mp3", sample_rate: 44100, bit_rate: 128000 },
         language: "en"
       })
     });
 
     if (!response.ok) {
-      return mockSpeech(text);
+      const errorText = await response.text();
+      return {
+        ...mockSpeech(text),
+        fallbackReason: `Cartesia ${response.status}: ${errorText.slice(0, 180)}`
+      } as SpeechAudioResult;
     }
 
     const buffer = Buffer.from(await response.arrayBuffer());
@@ -353,8 +473,11 @@ export async function synthesizeWithCartesia(
       durationEstimateSec: Math.max(1.8, text.split(/\s+/).length * 0.28),
       provider: "cartesia"
     };
-  } catch {
-    return mockSpeech(text);
+  } catch (error) {
+    return {
+      ...mockSpeech(text),
+      fallbackReason: error instanceof Error ? error.message : "Cartesia request failed"
+    } as SpeechAudioResult;
   }
 }
 

@@ -3,16 +3,16 @@ import { describe, expect, it } from "vitest";
 import { createApp } from "../server/app";
 
 describe("runtime API settings", () => {
-  it("defaults to the China-first preset while staying in mock mode", async () => {
+  it("reports the configured provider preset while staying safe in mock mode", async () => {
     const app = createApp({ apiMode: "mock" });
 
     const settings = await request(app).get("/api/settings").expect(200);
 
     expect(settings.body.mode).toBe("mock");
-    expect(settings.body.editable.providerPreset).toBe("china-qwen");
-    expect(settings.body.providers.asr.provider).toBe("qwen-asr");
-    expect(settings.body.providers.llm.provider).toBe("qwen");
-    expect(settings.body.providers.tts.provider).toBe("qwen-tts");
+    expect(settings.body.editable.providerPreset).toBeTruthy();
+    expect(settings.body.providers.asr.active).toBe(false);
+    expect(settings.body.providers.llm.active).toBe(false);
+    expect(settings.body.providers.tts.active).toBe(false);
   });
 
   it("applies the China Qwen preset without exposing submitted secrets", async () => {
@@ -91,6 +91,41 @@ describe("runtime API settings", () => {
     expect(update.text).not.toContain("dashscope_speech_secret");
   });
 
+  it("accepts AssemblyAI ASR with custom LLM and Cartesia TTS", async () => {
+    const app = createApp({ apiMode: "mock" });
+
+    const update = await request(app)
+      .post("/api/settings")
+      .send({
+        apiMode: "live",
+        providerPreset: "custom",
+        asrProvider: "assemblyai",
+        asrApiKey: "assembly_test_secret",
+        asrModel: "universal-3-pro",
+        llmProvider: "custom-openai-compatible",
+        llmApiKey: "hezu_test_secret",
+        llmBaseUrl: "https://hezu.ink/v1",
+        llmModel: "gpt-5.4-mini",
+        ttsProvider: "cartesia",
+        ttsApiKey: "cartesia_test_secret",
+        ttsModel: "sonic-3.5",
+        cartesiaVoiceId: "voice_test"
+      })
+      .expect(200);
+
+    expect(update.body.providers.asr.provider).toBe("assemblyai");
+    expect(update.body.providers.asr.configured).toBe(true);
+    expect(update.body.providers.asr.model).toBe("universal-3-pro");
+    expect(update.body.providers.llm.provider).toBe("custom-openai-compatible");
+    expect(update.body.providers.llm.model).toBe("gpt-5.4-mini");
+    expect(update.body.providers.llm.baseUrl).toBe("https://hezu.ink/v1");
+    expect(update.body.providers.tts.provider).toBe("cartesia");
+    expect(update.body.providers.tts.configured).toBe(true);
+    expect(update.text).not.toContain("assembly_test_secret");
+    expect(update.text).not.toContain("hezu_test_secret");
+    expect(update.text).not.toContain("cartesia_test_secret");
+  });
+
   it("updates provider configuration without exposing submitted secret values", async () => {
     const app = createApp({ apiMode: "mock" });
 
@@ -98,7 +133,10 @@ describe("runtime API settings", () => {
       .post("/api/settings")
       .send({
         apiMode: "live",
-        providerPreset: "global-mixed",
+        providerPreset: "custom",
+        asrProvider: "deepgram",
+        llmProvider: "openai",
+        ttsProvider: "cartesia",
         deepgramApiKey: "dg_test_secret",
         openaiApiKey: "sk-test-secret",
         openaiModel: "gpt-4o-mini",

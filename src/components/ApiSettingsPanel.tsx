@@ -33,14 +33,14 @@ const PRESET_DEFAULTS: Record<string, Partial<SettingsForm>> = {
     pronunciationProvider: "qwen"
   },
   "global-mixed": {
-    asrProvider: "deepgram",
-    asrModel: "nova-3",
-    llmProvider: "openai",
-    llmBaseUrl: "",
-    llmModel: "gpt-4o-mini",
+    asrProvider: "assemblyai",
+    asrModel: "universal-3-pro",
+    llmProvider: "custom-openai-compatible",
+    llmBaseUrl: "https://hezu.ink/v1",
+    llmModel: "gpt-5.4-mini",
     ttsProvider: "cartesia",
     ttsVersion: "2026-03-01",
-    ttsModel: "sonic-latest",
+    ttsModel: "sonic-3.5",
     pronunciationProvider: "rule"
   },
   custom: {}
@@ -54,8 +54,8 @@ const PRESETS = [
   },
   {
     id: "global-mixed",
-    title: "海外混合",
-    description: "Deepgram + OpenAI + Cartesia，保留原始演示路线。"
+    title: "比赛混合",
+    description: "AssemblyAI + hezu LLM + Cartesia，当前实测路线。"
   },
   {
     id: "custom",
@@ -67,6 +67,7 @@ const PRESETS = [
 const ASR_OPTIONS = [
   ["mock", "Mock 演示转写"],
   ["qwen-asr", "通义千问 ASR"],
+  ["assemblyai", "AssemblyAI"],
   ["deepgram", "Deepgram Nova-3"],
   ["aliyun-isi", "阿里云智能语音"],
   ["iflytek", "讯飞语音识别"]

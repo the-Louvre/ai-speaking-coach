@@ -2,7 +2,7 @@ import type { LiveConfig } from "./providers/liveProviders";
 import "./env";
 
 export type ProviderPreset = "global-mixed" | "china-qwen" | "custom";
-export type AsrProvider = "mock" | "deepgram" | "qwen-asr" | "aliyun-isi" | "iflytek";
+export type AsrProvider = "mock" | "deepgram" | "qwen-asr" | "assemblyai" | "aliyun-isi" | "iflytek";
 export type LlmProvider = "openai" | "qwen" | "doubao" | "kimi" | "custom-openai-compatible";
 export type TtsProvider = "mock" | "cartesia" | "qwen-tts" | "aliyun-isi" | "iflytek";
 export type PronunciationProvider = "rule" | "qwen" | "iflytek";
@@ -63,14 +63,14 @@ const PRESETS: Record<ProviderPreset, ProviderDefaults> = {
   },
   "global-mixed": {
     providerPreset: "global-mixed",
-    asrProvider: "deepgram",
-    asrModel: "nova-3",
-    llmProvider: "openai",
-    llmBaseUrl: "",
-    llmModel: "gpt-4o-mini",
+    asrProvider: "assemblyai",
+    asrModel: "universal-3-pro",
+    llmProvider: "custom-openai-compatible",
+    llmBaseUrl: "https://hezu.ink/v1",
+    llmModel: "gpt-5.4-mini",
     ttsProvider: "cartesia",
     ttsVersion: "2026-03-01",
-    ttsModel: "sonic-latest",
+    ttsModel: "sonic-3.5",
     pronunciationProvider: "rule"
   },
   custom: {
@@ -98,7 +98,7 @@ function readProviderPreset(value: string | undefined): ProviderPreset {
 }
 
 function readAsrProvider(value: string | undefined, fallback: AsrProvider): AsrProvider {
-  return isOneOf(value, ["mock", "deepgram", "qwen-asr", "aliyun-isi", "iflytek"] as const)
+  return isOneOf(value, ["mock", "deepgram", "qwen-asr", "assemblyai", "aliyun-isi", "iflytek"] as const)
     ? value
     : fallback;
 }
@@ -147,6 +147,7 @@ export function getConfig(options: AppOptions = {}): LiveConfig {
     asrModel: process.env.ASR_MODEL || preset.asrModel,
     asrApiKey:
       process.env.ASR_API_KEY ||
+      (asrProvider === "assemblyai" ? process.env.ASSEMBLYAI_API_KEY : undefined) ||
       (asrProvider === "qwen-asr" ? dashscopeApiKey : undefined) ||
       process.env.DEEPGRAM_API_KEY,
     deepgramApiKey: process.env.DEEPGRAM_API_KEY || process.env.ASR_API_KEY,
@@ -277,8 +278,13 @@ export function getHealth(config: LiveConfig) {
   const asrIsReady =
     asrIsMock ||
     (config.asrProvider === "deepgram" && Boolean(config.deepgramApiKey)) ||
-    (config.asrProvider === "qwen-asr" && Boolean(config.asrApiKey));
-  const asrIsImplemented = asrIsMock || config.asrProvider === "deepgram" || config.asrProvider === "qwen-asr";
+    (config.asrProvider === "qwen-asr" && Boolean(config.asrApiKey)) ||
+    (config.asrProvider === "assemblyai" && Boolean(config.asrApiKey));
+  const asrIsImplemented =
+    asrIsMock ||
+    config.asrProvider === "deepgram" ||
+    config.asrProvider === "qwen-asr" ||
+    config.asrProvider === "assemblyai";
   const ttsIsMock = config.ttsProvider === "mock";
   const ttsIsReady =
     ttsIsMock ||
