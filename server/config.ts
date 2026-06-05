@@ -75,15 +75,15 @@ const PRESETS: Record<ProviderPreset, ProviderDefaults> = {
   },
   custom: {
     providerPreset: "custom",
-    asrProvider: "qwen-asr",
-    asrModel: "qwen3-asr-flash",
+    asrProvider: "assemblyai",
+    asrModel: "universal-3-pro",
     llmProvider: "custom-openai-compatible",
-    llmBaseUrl: "",
-    llmModel: "qwen-plus",
-    ttsProvider: "qwen-tts",
-    ttsVersion: "",
-    ttsModel: "qwen3-tts-flash",
-    pronunciationProvider: "qwen"
+    llmBaseUrl: "https://hezu.ink/v1",
+    llmModel: "gpt-5.4-mini",
+    ttsProvider: "cartesia",
+    ttsVersion: "2026-03-01",
+    ttsModel: "sonic-3.5",
+    pronunciationProvider: "rule"
   }
 };
 
@@ -94,7 +94,7 @@ function isOneOf<T extends string>(value: string | undefined, options: readonly 
 function readProviderPreset(value: string | undefined): ProviderPreset {
   return isOneOf(value, ["global-mixed", "china-qwen", "custom"] as const)
     ? value
-    : "china-qwen";
+    : "global-mixed";
 }
 
 function readAsrProvider(value: string | undefined, fallback: AsrProvider): AsrProvider {

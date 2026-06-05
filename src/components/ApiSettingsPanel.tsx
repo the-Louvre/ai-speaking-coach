@@ -46,6 +46,24 @@ const PRESET_DEFAULTS: Record<string, Partial<SettingsForm>> = {
   custom: {}
 };
 
+const FALLBACK_FORM: SettingsForm = {
+  apiMode: "mock",
+  providerPreset: "global-mixed",
+  asrProvider: "assemblyai",
+  asrApiKey: "",
+  asrModel: "universal-3-pro",
+  llmProvider: "custom-openai-compatible",
+  llmApiKey: "",
+  llmBaseUrl: "https://hezu.ink/v1",
+  llmModel: "gpt-5.4-mini",
+  ttsProvider: "cartesia",
+  ttsApiKey: "",
+  ttsVersion: "2026-03-01",
+  ttsModel: "sonic-3.5",
+  ttsVoiceId: "",
+  pronunciationProvider: "rule"
+};
+
 const PRESETS = [
   {
     id: "china-qwen",
@@ -97,21 +115,22 @@ const PRONUNCIATION_OPTIONS = [
 
 function createForm(settings: RuntimeSettingsResult | null): SettingsForm {
   return {
-    apiMode: settings?.mode ?? "mock",
-    providerPreset: settings?.editable.providerPreset ?? "china-qwen",
-    asrProvider: settings?.editable.asrProvider ?? "qwen-asr",
+    ...FALLBACK_FORM,
+    apiMode: settings?.mode ?? FALLBACK_FORM.apiMode,
+    providerPreset: settings?.editable.providerPreset ?? FALLBACK_FORM.providerPreset,
+    asrProvider: settings?.editable.asrProvider ?? FALLBACK_FORM.asrProvider,
     asrApiKey: "",
-    asrModel: settings?.editable.asrModel ?? "qwen3-asr-flash",
-    llmProvider: settings?.editable.llmProvider ?? "qwen",
+    asrModel: settings?.editable.asrModel ?? FALLBACK_FORM.asrModel,
+    llmProvider: settings?.editable.llmProvider ?? FALLBACK_FORM.llmProvider,
     llmApiKey: "",
-    llmBaseUrl: settings?.editable.llmBaseUrl ?? "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    llmModel: settings?.editable.llmModel ?? "qwen-plus",
-    ttsProvider: settings?.editable.ttsProvider ?? "qwen-tts",
+    llmBaseUrl: settings?.editable.llmBaseUrl ?? FALLBACK_FORM.llmBaseUrl,
+    llmModel: settings?.editable.llmModel ?? FALLBACK_FORM.llmModel,
+    ttsProvider: settings?.editable.ttsProvider ?? FALLBACK_FORM.ttsProvider,
     ttsApiKey: "",
-    ttsVersion: settings?.editable.ttsVersion ?? "",
-    ttsModel: settings?.editable.ttsModel ?? "qwen3-tts-flash",
-    ttsVoiceId: settings?.editable.ttsVoiceId ?? "",
-    pronunciationProvider: settings?.editable.pronunciationProvider ?? "qwen"
+    ttsVersion: settings?.editable.ttsVersion ?? FALLBACK_FORM.ttsVersion,
+    ttsModel: settings?.editable.ttsModel ?? FALLBACK_FORM.ttsModel,
+    ttsVoiceId: settings?.editable.ttsVoiceId ?? FALLBACK_FORM.ttsVoiceId,
+    pronunciationProvider: settings?.editable.pronunciationProvider ?? FALLBACK_FORM.pronunciationProvider
   };
 }
 
@@ -200,6 +219,10 @@ export function ApiSettingsPanel({
       status: settings?.providers.pronunciation.status
     }
   ];
+  const settingsNote =
+    form.providerPreset === "china-qwen"
+      ? "当前选择国内初跑预设：通义千问 / 百炼负责 ASR、LLM、TTS 和文本评估。密钥只发送到本地 Node API 的运行时内存，不写入仓库，也不保存到浏览器。刷新后如需持久化，请使用 `.env.local`。"
+      : "当前选择比赛混合或自定义链路：ASR、LLM、TTS 可分别替换，默认展示 AssemblyAI + hezu 兼容 LLM + Cartesia。密钥只发送到本地 Node API 的运行时内存，不写入仓库，也不保存到浏览器。刷新后如需持久化，请使用 `.env.local`。";
 
   return (
     <div className="settings-backdrop" role="dialog" aria-modal="true" aria-label="API 配置">
@@ -253,7 +276,7 @@ export function ApiSettingsPanel({
 
         <div className="settings-section-title">
           <span>三段式链路</span>
-          <small>ASR → LLM → TTS，可先只让国内 LLM 进入 live。</small>
+          <small>ASR → LLM → TTS，当前链路由本地后端运行时配置决定。</small>
         </div>
 
         <div className="settings-grid">
@@ -310,7 +333,7 @@ export function ApiSettingsPanel({
               type="password"
               autoComplete="off"
               value={form.llmApiKey}
-              placeholder="DASHSCOPE_API_KEY / ARK_API_KEY / MOONSHOT_API_KEY"
+              placeholder="留空则保持当前后端配置"
               onChange={(event) => setForm((current) => ({ ...current, llmApiKey: event.target.value }))}
             />
           </label>
@@ -318,7 +341,7 @@ export function ApiSettingsPanel({
             LLM Base URL
             <input
               value={form.llmBaseUrl}
-              placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1"
+              placeholder="https://hezu.ink/v1 或其他 OpenAI 兼容地址"
               onChange={(event) => setForm((current) => ({ ...current, llmBaseUrl: event.target.value }))}
             />
           </label>
@@ -398,9 +421,7 @@ export function ApiSettingsPanel({
           </label>
         </div>
 
-        <p className="settings-note">
-          国内初跑默认使用通义千问 / 百炼 OpenAI 兼容接口。密钥只发送到本地 Node API 的运行时内存，不写入仓库，也不保存到浏览器。刷新后如需持久化，请使用 `.env.local`。
-        </p>
+        <p className="settings-note">{settingsNote}</p>
 
         <div className="settings-actions">
           <span>{status}</span>
