@@ -32,6 +32,144 @@
   text-rendering: optimizeLegibility;
 }
 
+/* Practice stage */
+.practice-grid {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 22px;
+}
+
+.stage {
+  position: relative;
+  display: flex;
+  min-height: 460px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  overflow: hidden;
+  border: 2px solid var(--swan);
+  border-radius: 24px;
+  padding: 0 0 26px;
+  background: linear-gradient(180deg, #dff0ff 0%, #eaf6ff 46%, #f3ece2 46%, #efe6d8 100%);
+}
+
+.stage-q {
+  position: absolute;
+  z-index: 3;
+  top: 26px;
+  left: 50%;
+  max-width: 70%;
+  transform: translateX(-50%);
+  border: 2px solid var(--macaw);
+  border-radius: 18px;
+  padding: 14px 20px;
+  background: #fff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  font-size: 18px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.stage-mascot {
+  position: absolute;
+  z-index: 2;
+  bottom: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.stage-subtitle {
+  position: absolute;
+  z-index: 3;
+  bottom: 150px;
+  left: 50%;
+  max-width: 70%;
+  transform: translateX(-50%);
+  border: 2px dashed var(--swan);
+  border-radius: 14px;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--wolf);
+  font-weight: 800;
+}
+
+.stage-speak {
+  position: relative;
+  z-index: 3;
+  width: 118px;
+  height: 118px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--feather-green);
+  box-shadow: 0 6px 0 var(--wing-overlay);
+  color: #fff;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.stage-speak:disabled {
+  opacity: 0.7;
+}
+
+.stage-ring {
+  position: absolute;
+  z-index: 2;
+  bottom: 14px;
+  left: 50%;
+  width: 118px;
+  height: 118px;
+  transform: translateX(-50%);
+  border: 3px solid var(--mask-green);
+  border-radius: 50%;
+  animation: stage-pulse 1.6s ease-out infinite;
+}
+
+@keyframes stage-pulse {
+  0% {
+    opacity: 0.7;
+    transform: translateX(-50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) scale(1.9);
+  }
+}
+
+.goal-now {
+  margin-bottom: 14px;
+  border: 2px solid var(--mask-green);
+  border-radius: 14px;
+  padding: 14px;
+  background: #eafbe0;
+}
+
+.round-tip {
+  margin-bottom: 14px;
+  border: 2px solid var(--bee);
+  border-radius: 14px;
+  padding: 12px;
+  background: #fff7d6;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.tech-fold {
+  border: 2px solid var(--swan);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--panel-bg);
+  color: var(--wolf);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+@media (max-width: 1100px) {
+  .practice-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Home low-pressure layout */
 .home-hero {
   display: grid;
