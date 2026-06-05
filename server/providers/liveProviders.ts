@@ -14,6 +14,8 @@ import type {
 } from "../../shared/schemas";
 import { dialogueTurnResultSchema, reportResultSchema } from "../../shared/schemas";
 import { mockDialogueTurn, mockReport, mockSpeech, mockTranscribe, type DialogueContextTurn } from "./mockProviders";
+import { createCorrectionPreview } from "./correctionPreview";
+import { deriveSpeechEvidence } from "./speechEvidence";
 
 export type LiveConfig = {
   apiMode: "mock" | "live";
@@ -109,7 +111,7 @@ export async function transcribeWithConfiguredProvider(
     };
     const alternative = json.results?.channels?.[0]?.alternatives?.[0];
 
-    return {
+    const base = {
       text: alternative?.transcript || "",
       confidence: alternative?.confidence ?? 0,
       words:
@@ -123,6 +125,10 @@ export async function transcribeWithConfiguredProvider(
       durationSec: json.metadata?.duration ?? 0,
       providerLatencyMs: Date.now() - started,
       provider: "deepgram"
+    };
+    return {
+      ...base,
+      ...deriveSpeechEvidence(base)
     };
   } catch (error) {
     return {
@@ -205,7 +211,7 @@ async function transcribeWithAssemblyAi(
       return mockAsrFallback(config, "AssemblyAI transcript timed out");
     }
 
-    return {
+    const base = {
       text: transcript.text || "",
       confidence: transcript.confidence ?? averageConfidence(transcript.words),
       words:
@@ -219,6 +225,10 @@ async function transcribeWithAssemblyAi(
       durationSec: transcript.audio_duration ?? 0,
       providerLatencyMs: Date.now() - started,
       provider: "assemblyai"
+    };
+    return {
+      ...base,
+      ...deriveSpeechEvidence(base)
     };
   } catch (error) {
     return mockAsrFallback(config, error instanceof Error ? error.message : "AssemblyAI request failed");
@@ -320,6 +330,9 @@ export async function generateTurnWithLlm(
         "You are an English speaking coach for Chinese learners.",
         "Return one strict JSON object only. Do not include Markdown.",
         "The JSON keys must be aiText, hintZh, coachState, correctionPreview, nextRoundGoal, provider.",
+        "hintZh, correctionPreview, and nextRoundGoal must be Chinese-first coaching notes.",
+        "correctionPreview must be related to the user's exact answer. Do not reuse examples from earlier turns.",
+        "If you include an improved English sentence, explain it in Chinese before the sentence.",
         "coachState must be asking.",
         `provider must be ${config.llmProvider}.`
       ].join(" "),
@@ -335,8 +348,14 @@ User answer: ${input.userText}
 Return a concise next question in English and a coaching hint in Chinese. The next question must be different from every AI question in the conversation and from the current AI question.`
     );
 
+    const record = json as Record<string, unknown>;
     return dialogueTurnResultSchema.parse({
-      ...(json as Record<string, unknown>),
+      ...record,
+      correctionPreview: createCorrectionPreview({
+        userText: input.userText,
+        round: input.round,
+        rawPreview: typeof record.correctionPreview === "string" ? record.correctionPreview : undefined
+      }),
       coachState: "asking",
       provider: config.llmProvider
     });
@@ -408,7 +427,7 @@ export async function generateReportWithLlm(
   config: LiveConfig
 ): Promise<ReportResult> {
   if (config.apiMode !== "live" || !config.llmApiKey) {
-    return mockReport();
+    return mockReport(_payload);
   }
 
   try {
@@ -417,8 +436,9 @@ export async function generateReportWithLlm(
       [
         "Generate a Chinese-first English speaking practice report.",
         "Return one strict JSON object only. Do not include Markdown.",
-        "The JSON keys must be reportId, totalScore, dimensions, summaryZh, corrections, suggestions, coachCommentZh, provider.",
+        "The JSON keys must be reportId, totalScore, dimensions, summaryZh, corrections, suggestions, dimensionEvidence, coachCommentZh, provider.",
         "dimensions must include pronunciation, fluency, grammar, expression, taskCompletion.",
+        "dimensionEvidence must cite concrete turn numbers and explain why each dimension got its score.",
         `provider must be ${config.llmProvider}.`
       ].join(" "),
       JSON.stringify(_payload)
@@ -429,6 +449,6 @@ export async function generateReportWithLlm(
       provider: config.llmProvider
     });
   } catch {
-    return mockReport();
+    return mockReport(_payload);
   }
 }

@@ -20,6 +20,13 @@ const report: ReportResult = {
   summaryZh: "回答清楚。",
   corrections: [{ original: "I build app.", improved: "I built an app.", explanationZh: "使用过去式。" }],
   suggestions: ["下一轮补一个数字。"],
+  dimensionEvidence: [
+    { dimensionId: "pronunciation", evidenceZh: "转写置信度稳定。", turnRefs: [1] },
+    { dimensionId: "fluency", evidenceZh: "语速稳定。", turnRefs: [1] },
+    { dimensionId: "grammar", evidenceZh: "存在过去式问题。", turnRefs: [1] },
+    { dimensionId: "expression", evidenceZh: "表达需要更具体。", turnRefs: [1] },
+    { dimensionId: "taskCompletion", evidenceZh: "回答覆盖任务。", turnRefs: [1] }
+  ],
   coachCommentZh: "继续补具体结果。",
   provider: "mock"
 };

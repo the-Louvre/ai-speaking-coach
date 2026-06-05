@@ -5,6 +5,8 @@ import type {
   TranscriptResult
 } from "../../shared/schemas";
 import { findScenarioTask } from "../data";
+import { createCorrectionPreview } from "./correctionPreview";
+import { deriveSpeechEvidence } from "./speechEvidence";
 
 export type DialogueContextTurn = {
   round: number;
@@ -39,7 +41,7 @@ export function mockTranscribe(): TranscriptResult {
     "flow"
   ];
 
-  return {
+  const base = {
     text: "I built a campus navigation project and improved the route flow.",
     confidence: 0.93,
     words: words.map((word, index) => ({
@@ -51,7 +53,12 @@ export function mockTranscribe(): TranscriptResult {
     })),
     durationSec: 4.1,
     providerLatencyMs: 120,
-    provider: "mock",
+    provider: "mock"
+  };
+
+  return {
+    ...base,
+    ...deriveSpeechEvidence(base),
     fallback: true,
     fallbackReason: "API_MODE=mock"
   };
@@ -87,10 +94,7 @@ export function mockDialogueTurn(
     aiText,
     hintZh: "回答要更具体：先说结果，再补数字或用户影响。",
     coachState: "asking",
-    correctionPreview:
-      round <= 1
-        ? "建议把 I built campus navigation app 改为 I built a campus navigation app."
-        : "这一轮表达基本清楚，继续压缩句子长度。",
+    correctionPreview: createCorrectionPreview({ userText, round }),
     nextRoundGoal: "补充一个具体结果，例如效率提升、错误减少或用户反馈。",
     provider: "mock",
     fallback: true
@@ -108,7 +112,102 @@ export function mockSpeech(text: string): SpeechAudioResult {
   };
 }
 
-export function mockReport(): ReportResult {
+type ReportTurnInput = DialogueContextTurn & {
+  transcriptConfidence?: number;
+  speechRateWpm?: number;
+  lowConfidenceWords?: Array<{ word: string; confidence: number }>;
+  pauseEvents?: Array<{ durationSec: number }>;
+  pronunciationNotes?: string[];
+};
+
+function normalizeReportTurns(payload: unknown): ReportTurnInput[] {
+  if (!payload || typeof payload !== "object") return [];
+  const turns = (payload as { turns?: unknown }).turns;
+  if (!Array.isArray(turns)) return [];
+  return turns
+    .map((turn): ReportTurnInput | null => {
+      if (!turn || typeof turn !== "object") return null;
+      const item = turn as Record<string, unknown>;
+      return {
+        round: Number(item.round || 0),
+        aiText: String(item.aiText || ""),
+        userText: String(item.userText || ""),
+        transcriptConfidence:
+          typeof item.transcriptConfidence === "number" ? item.transcriptConfidence : undefined,
+        speechRateWpm: typeof item.speechRateWpm === "number" ? item.speechRateWpm : undefined,
+        lowConfidenceWords: Array.isArray(item.lowConfidenceWords)
+          ? item.lowConfidenceWords
+              .map((word) => {
+                if (!word || typeof word !== "object") return null;
+                const value = word as Record<string, unknown>;
+                return {
+                  word: String(value.word || ""),
+                  confidence: Number(value.confidence || 0)
+                };
+              })
+              .filter((word): word is { word: string; confidence: number } => Boolean(word?.word))
+          : [],
+        pauseEvents: Array.isArray(item.pauseEvents)
+          ? item.pauseEvents
+              .map((pause) => {
+                if (!pause || typeof pause !== "object") return null;
+                return { durationSec: Number((pause as Record<string, unknown>).durationSec || 0) };
+              })
+              .filter((pause): pause is { durationSec: number } => Boolean(pause?.durationSec))
+          : [],
+        pronunciationNotes: Array.isArray(item.pronunciationNotes)
+          ? item.pronunciationNotes.map(String)
+          : []
+      };
+    })
+    .filter((turn): turn is ReportTurnInput => Boolean(turn?.round && turn.userText.trim()));
+}
+
+function buildDimensionEvidence(turns: ReportTurnInput[]): ReportResult["dimensionEvidence"] {
+  const turnRefs = turns.length ? turns.map((turn) => turn.round) : [1];
+  const firstTurn = turns[0];
+  const lowConfidenceWords = turns.flatMap((turn) => turn.lowConfidenceWords ?? []);
+  const pauseCount = turns.reduce((sum, turn) => sum + (turn.pauseEvents?.length ?? 0), 0);
+  const averageRate = Math.round(
+    turns.reduce((sum, turn) => sum + (turn.speechRateWpm ?? 0), 0) /
+      Math.max(1, turns.filter((turn) => turn.speechRateWpm).length)
+  );
+  const lowWordText = lowConfidenceWords.length
+    ? lowConfidenceWords.map((word) => word.word).join(", ")
+    : "未发现明显低置信词";
+
+  return [
+    {
+      dimensionId: "pronunciation",
+      evidenceZh: `第 ${firstTurn?.round ?? 1} 轮发音证据：${lowWordText}。评分为规则估算，来自转写置信度和低置信词。`,
+      turnRefs
+    },
+    {
+      dimensionId: "fluency",
+      evidenceZh: `语速约 ${averageRate || "--"} WPM，检测到 ${pauseCount} 处明显停顿。`,
+      turnRefs
+    },
+    {
+      dimensionId: "grammar",
+      evidenceZh: "逐句纠错显示冠词和时态仍是主要语法问题。",
+      turnRefs
+    },
+    {
+      dimensionId: "expression",
+      evidenceZh: "回答能表达意思，但项目结果、数字和用户影响仍需要更具体。",
+      turnRefs
+    },
+    {
+      dimensionId: "taskCompletion",
+      evidenceZh: "回答覆盖任务主题，并能继续回应追问；下一轮需要更快给出结论。",
+      turnRefs
+    }
+  ];
+}
+
+export function mockReport(payload?: unknown): ReportResult {
+  const turns = normalizeReportTurns(payload);
+
   return {
     reportId: `report_${Date.now()}`,
     totalScore: 84,
@@ -162,6 +261,7 @@ export function mockReport(): ReportResult {
       "至少加入一个数字，例如节省时间或减少错误。",
       "回答追问时先短答，再补背景。"
     ],
+    dimensionEvidence: buildDimensionEvidence(turns),
     coachCommentZh: "语法还算稳，但表达太泛。下一轮加一个具体数字。",
     provider: "mock",
     fallback: true

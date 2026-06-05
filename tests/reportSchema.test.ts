@@ -11,6 +11,7 @@ describe("OpenAI report JSON schema", () => {
       "summaryZh",
       "corrections",
       "suggestions",
+      "dimensionEvidence",
       "coachCommentZh",
       "provider"
     ]);
@@ -26,5 +27,11 @@ describe("OpenAI report JSON schema", () => {
       "score",
       "explanationZh"
     ]);
+  });
+
+  it("requires dimension evidence so live reports explain why each score changed", () => {
+    const evidence = reportJsonSchema.properties.dimensionEvidence;
+
+    expect(evidence.items.required).toEqual(["dimensionId", "evidenceZh", "turnRefs"]);
   });
 });

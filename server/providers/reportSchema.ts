@@ -8,6 +8,7 @@ export const reportJsonSchema = {
     "summaryZh",
     "corrections",
     "suggestions",
+    "dimensionEvidence",
     "coachCommentZh",
     "provider"
   ],
@@ -51,6 +52,25 @@ export const reportJsonSchema = {
     suggestions: {
       type: "array",
       items: { type: "string" }
+    },
+    dimensionEvidence: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["dimensionId", "evidenceZh", "turnRefs"],
+        properties: {
+          dimensionId: {
+            type: "string",
+            enum: ["pronunciation", "fluency", "grammar", "expression", "taskCompletion"]
+          },
+          evidenceZh: { type: "string" },
+          turnRefs: {
+            type: "array",
+            items: { type: "number" }
+          }
+        }
+      }
     },
     coachCommentZh: { type: "string" },
     provider: { type: "string" }

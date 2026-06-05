@@ -68,6 +68,9 @@ describe("local API in mock mode", () => {
     expect(response.body.text).toContain("project");
     expect(response.body.confidence).toBeGreaterThan(0);
     expect(response.body.words[0]).toHaveProperty("confidence");
+    expect(response.body.speechRateWpm).toBeGreaterThan(0);
+    expect(response.body.lowConfidenceWords[0]).toMatchObject({ word: "navigation" });
+    expect(response.body.pronunciationNotes.join(" ")).toContain("规则估算");
   });
 
   it("returns a next AI turn and synthesized mock speech", async () => {
@@ -78,12 +81,14 @@ describe("local API in mock mode", () => {
         scenarioId: "interview",
         taskId: "internship-intro",
         round: 1,
-        userText: "I built a campus navigation app and improved the route flow."
+        userText: "This is my project, and I'm very proud of it."
       })
       .expect(200);
 
     expect(turn.body.aiText).toContain("result");
     expect(turn.body.hintZh).toContain("具体");
+    expect(turn.body.correctionPreview).toContain("建议");
+    expect(turn.body.correctionPreview).not.toContain("campus navigation");
 
     const speech = await request(app)
       .post("/api/tts/synthesize")
@@ -142,7 +147,11 @@ describe("local API in mock mode", () => {
             round: 1,
             aiText: "Tell me about a project you are proud of.",
             userText: "I built campus navigation app. It make route clear.",
-            transcriptConfidence: 0.91
+            transcriptConfidence: 0.91,
+            speechRateWpm: 118,
+            lowConfidenceWords: [{ word: "navigation", start: 0.9, end: 1.4, confidence: 0.72 }],
+            pauseEvents: [{ afterWord: "campus", beforeWord: "navigation", start: 0.8, end: 1.5, durationSec: 0.7 }],
+            pronunciationNotes: ["低置信词：navigation。", "规则估算：语速稳定。"]
           }
         ]
       })
@@ -151,6 +160,10 @@ describe("local API in mock mode", () => {
     const parsed = reportResultSchema.parse(response.body);
     expect(parsed.totalScore).toBeGreaterThanOrEqual(70);
     expect(parsed.dimensions).toHaveLength(5);
+    expect(parsed.dimensionEvidence.find((item) => item.dimensionId === "pronunciation")?.evidenceZh).toContain(
+      "navigation"
+    );
+    expect(parsed.dimensionEvidence.find((item) => item.dimensionId === "fluency")?.turnRefs).toContain(1);
     expect(parsed.corrections[0].explanationZh).toContain("时态");
   });
 });

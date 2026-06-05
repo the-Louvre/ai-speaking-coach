@@ -18,11 +18,16 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CoachState, DialogueTurnResult, ReportResult, SpeechAudioResult } from "../shared/schemas";
-import type { Scenario } from "../server/data";
+import type {
+  CoachState,
+  DialogueTurnResult,
+  ReportResult,
+  SpeechAudioResult,
+  TranscriptResult
+} from "../shared/schemas";
+import { createTaskMetadata, type Scenario } from "../server/data";
 import { api, type HealthResult, type SessionStart } from "./api";
 import { ApiSettingsPanel } from "./components/ApiSettingsPanel";
-import { BrandGuideSections, BrandTopBar, GuideCardGrid } from "./components/BrandGuidelines";
 import { CoachAvatar } from "./components/CoachAvatar";
 import { WeekDots } from "./components/WeekDots";
 import { getShanghaiDate, type CheckinState } from "./domain/checkin";
@@ -47,7 +52,13 @@ type Turn = {
   userText: string;
   hintZh?: string;
   correctionPreview?: string;
+  nextRoundGoal?: string;
   transcriptConfidence?: number;
+  transcriptProvider?: string;
+  speechRateWpm?: number;
+  lowConfidenceWords?: TranscriptResult["lowConfidenceWords"];
+  pauseEvents?: TranscriptResult["pauseEvents"];
+  pronunciationNotes?: string[];
 };
 type JourneyStatus = "done" | "active" | "waiting";
 type JourneyStep = {
@@ -76,7 +87,8 @@ const fallbackScenarios: Scenario[] = [
         titleEn: "Internship introduction",
         aiRoleZh: "AI 面试官",
         focus: "把项目结果说清楚",
-        openingQuestion: "Tell me about one project you are proud of."
+        openingQuestion: "Tell me about one project you are proud of.",
+        ...createTaskMetadata({ focus: "把项目结果说清楚" })
       }
     ]
   }
@@ -102,6 +114,7 @@ export default function App() {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [latestAiText, setLatestAiText] = useState("");
   const [latestHint, setLatestHint] = useState("");
+  const [latestTranscript, setLatestTranscript] = useState<TranscriptResult | null>(null);
   const [speech, setSpeech] = useState<SpeechAudioResult | null>(null);
   const [report, setReport] = useState<ReportResult | null>(null);
   const [checkin, setCheckin] = useState<CheckinState>(() => loadCheckin());
@@ -165,6 +178,7 @@ export default function App() {
     setLatestHint(next.hintZh);
     setTurns([]);
     setDraft("");
+    setLatestTranscript(null);
     setReport(null);
     setCoachState("asking");
     setScreen("practice");
@@ -205,10 +219,11 @@ export default function App() {
     setCoachState("thinking");
     const transcript = await api.transcribe(audio);
     setDraft(transcript.text);
+    setLatestTranscript(transcript);
     setLatestHint(
       transcript.fallback
         ? "当前使用模拟转写，可直接编辑答案后提交。"
-        : `转写置信度 ${(transcript.confidence * 100).toFixed(0)}%，可编辑后提交。`
+        : `转写置信度 ${(transcript.confidence * 100).toFixed(0)}%，语速 ${transcript.speechRateWpm} WPM，可编辑后提交。`
     );
     setCoachState("idle");
     setBusy("");
@@ -232,6 +247,7 @@ export default function App() {
       turns
     });
     const speechResult = await api.synthesize(turnResult.aiText);
+    const transcriptEvidence = createTurnTranscriptEvidence(latestTranscript);
     setTurns((items) => [
       ...items,
       {
@@ -240,13 +256,15 @@ export default function App() {
         userText: draft,
         hintZh: turnResult.hintZh,
         correctionPreview: turnResult.correctionPreview,
-        transcriptConfidence: 0.93
+        nextRoundGoal: turnResult.nextRoundGoal,
+        ...transcriptEvidence
       }
     ]);
     setLatestAiText(turnResult.aiText);
     setLatestHint(turnResult.hintZh);
     setSpeech(speechResult);
     setDraft("");
+    setLatestTranscript(null);
     setCoachState(turnResult.coachState);
     setBusy("");
     window.scrollTo({ top: 0, behavior: "instant" });
@@ -302,7 +320,8 @@ export default function App() {
           titleEn: "Custom practice",
           aiRoleZh: customForm.aiRole.trim() || defaultCustomForm.aiRole,
           focus,
-          openingQuestion
+          openingQuestion,
+          ...createTaskMetadata({ focus })
         }
       ]
     };
@@ -323,14 +342,14 @@ export default function App() {
 
   return (
     <>
-      <BrandTopBar />
+      <ProductTopBar />
       <main className="app-shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">AI Speaking Coach · lingo coach</p>
+          <p className="eyebrow">AI Speaking Coach</p>
           <h1>
-            <span>像每日闯关</span>
-            <span>一样练英语口语</span>
+            <span>5 分钟场景口语冲刺</span>
+            <span>说完就复盘</span>
           </h1>
         </div>
         <div className="top-actions">
@@ -377,7 +396,13 @@ export default function App() {
             summary={learningSummary}
           />
 
-          <GuideCardGrid onStartPractice={() => setScreen("prep")} />
+          <HomeFocusGrid
+            latestRecord={latestLearningRecord}
+            scenario={scenario}
+            summary={learningSummary}
+            task={task}
+            onStartPractice={() => setScreen("prep")}
+          />
 
           <div className="scenario-list">
             {scenarios.map((item) => (
@@ -396,8 +421,6 @@ export default function App() {
               </button>
             ))}
           </div>
-
-          <BrandGuideSections />
         </section>
       )}
 
@@ -409,12 +432,16 @@ export default function App() {
             </p>
             <h2>选择本轮任务</h2>
             <p>教练会保留对话节奏，只在关键节点给轻提示，完整纠错放到课后报告。</p>
-            <div className="requirement-strip" aria-label="题目硬需求覆盖">
-              <span>场景选择</span>
-              <span>实时语音</span>
-              <span>发音评测</span>
-              <span>语法纠错</span>
-              <span>课后总结</span>
+            <div className="task-meta-strip" aria-label="当前任务信息">
+              <span>{task.difficulty}</span>
+              <span>{task.aiRoleZh}</span>
+              <span>{task.roundGoals.length} 轮目标</span>
+              <span>{task.focus}</span>
+            </div>
+            <div className="active-goal prep-goal-card">
+              <span>本轮教练策略</span>
+              <strong>{task.roundGoals[0]}</strong>
+              <small>每一轮右侧都会沉淀“教练建议、下一轮目标、语音证据”，不是只展示转写文本。</small>
             </div>
             <div className="task-list">
               {scenario.tasks.map((item) => (
@@ -429,6 +456,7 @@ export default function App() {
                 </button>
               ))}
             </div>
+            <TaskCoachingPanel task={task} />
             <CustomScenarioBuilder
               form={customForm}
               onChange={setCustomForm}
@@ -507,16 +535,37 @@ export default function App() {
             <p>{task.focus}</p>
             <FlowTracker steps={journeySteps} />
             <div className="latency-card">
-              <span>端到端链路</span>
-              <strong>ASR -&gt; LLM -&gt; TTS</strong>
-              <small>{speech ? `最近 TTS ${speech.durationEstimateSec.toFixed(1)}s / ${speech.provider}` : "提交后展示播报状态"}</small>
+              <span>播报状态</span>
+              <strong>{speech ? `${speech.provider} / ${speech.format}` : "等待 AI 下一问"}</strong>
+              <small>{speech ? `预计 ${speech.durationEstimateSec.toFixed(1)}s，可用“重播 AI”回听。` : "提交本轮后生成追问和播报状态。"}</small>
             </div>
+            <SpeechEvidencePanel transcript={latestTranscript} turns={turns} />
             <div className="round-list">
               {turns.map((turn) => (
                 <div key={turn.round}>
                   <span>Round {turn.round}</span>
-                  <p>{turn.userText}</p>
-                  {turn.correctionPreview && <small>{turn.correctionPreview}</small>}
+                  <p className="round-answer">{turn.userText}</p>
+                  {turn.correctionPreview && (
+                    <small className="round-advice">
+                      <b>教练建议</b>
+                      {turn.correctionPreview}
+                    </small>
+                  )}
+                  {turn.nextRoundGoal && (
+                    <small className="round-goal">
+                      <b>下一轮目标</b>
+                      {turn.nextRoundGoal}
+                    </small>
+                  )}
+                  {turn.transcriptConfidence !== undefined && (
+                    <small className="round-evidence">
+                      <b>语音证据</b>
+                      转写 {formatPercent(turn.transcriptConfidence)} · {turn.speechRateWpm ?? "--"} WPM
+                      {turn.lowConfidenceWords?.length
+                        ? ` · 低置信词 ${formatLowConfidenceWords(turn.lowConfidenceWords)}`
+                        : ""}
+                    </small>
+                  )}
                 </div>
               ))}
             </div>
@@ -554,6 +603,7 @@ export default function App() {
                 <strong>{item.score}</strong>
                 <span>{item.labelZh}</span>
                 <small>{item.explanationZh}</small>
+                <em>{getDimensionEvidence(report, item.id)}</em>
               </div>
             ))}
           </div>
@@ -585,8 +635,142 @@ export default function App() {
   );
 }
 
+function ProductTopBar() {
+  return (
+    <div className="brand-top-bar">
+      <div className="brand-top-bar-inner">
+        <span className="brand-mark">AI Speaking Coach</span>
+        <span className="brand-top-note">Scenario practice · Evidence report</span>
+      </div>
+    </div>
+  );
+}
+
+function HomeFocusGrid({
+  latestRecord,
+  scenario,
+  summary,
+  task,
+  onStartPractice
+}: {
+  latestRecord: LearningState["records"][number] | null;
+  scenario: Scenario;
+  summary: ReturnType<typeof summarizeLearning>;
+  task: Scenario["tasks"][number];
+  onStartPractice: () => void;
+}) {
+  return (
+    <section className="home-focus-grid" aria-label="今日练习状态">
+      <button className="focus-card primary-focus" type="button" onClick={onStartPractice}>
+        <span>当前任务</span>
+        <strong>{scenario.nameZh} · {task.titleZh}</strong>
+        <small>{task.focus}</small>
+      </button>
+      <article className="focus-card">
+        <span>下轮重点</span>
+        <strong>{summary.priorityDimension}</strong>
+        <small>{latestRecord?.nextGoal ?? task.roundGoals[0]}</small>
+      </article>
+      <article className="focus-card">
+        <span>最近表现</span>
+        <strong>{summary.latestScore ?? "--"} 分</strong>
+        <small>
+          {latestRecord
+            ? `${latestRecord.scenarioNameZh} · ${latestRecord.correctionCount} 条纠错`
+            : "完成一轮后生成可追踪报告"}
+        </small>
+      </article>
+    </section>
+  );
+}
+
+function TaskCoachingPanel({ task }: { task: Scenario["tasks"][number] }) {
+  return (
+    <section className="task-coaching-panel" aria-label="任务教练策略">
+      <div>
+        <p className="eyebrow">Round Goals</p>
+        <ol>
+          {task.roundGoals.map((goal) => (
+            <li key={goal}>{goal}</li>
+          ))}
+        </ol>
+      </div>
+      <div>
+        <p className="eyebrow">Watch List</p>
+        <ul>
+          {task.commonMistakes.map((mistake) => (
+            <li key={mistake}>{mistake}</li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+function SpeechEvidencePanel({
+  transcript,
+  turns
+}: {
+  transcript: TranscriptResult | null;
+  turns: Turn[];
+}) {
+  const latestTurn = [...turns].reverse().find((turn) => turn.transcriptConfidence !== undefined);
+  const confidence = transcript?.confidence ?? latestTurn?.transcriptConfidence;
+  const speechRateWpm = transcript?.speechRateWpm ?? latestTurn?.speechRateWpm;
+  const lowConfidenceWords = transcript?.lowConfidenceWords ?? latestTurn?.lowConfidenceWords ?? [];
+  const pauseEvents = transcript?.pauseEvents ?? latestTurn?.pauseEvents ?? [];
+  const pronunciationNotes = transcript?.pronunciationNotes ?? latestTurn?.pronunciationNotes ?? [];
+
+  return (
+    <section className="speech-evidence-panel" aria-label="语音证据">
+      <span>语音证据</span>
+      {confidence === undefined ? (
+        <>
+          <strong>等待转写</strong>
+          <small>录音或使用模拟转写后，这里会显示置信度、语速和低置信词。</small>
+        </>
+      ) : (
+        <>
+          <div className="evidence-metrics">
+            <Metric icon={<Headphones size={18} />} value={formatPercent(confidence)} label="转写置信度" />
+            <Metric icon={<BarChart3 size={18} />} value={speechRateWpm ?? "--"} label="WPM" />
+            <Metric icon={<Target size={18} />} value={lowConfidenceWords.length} label="低置信词" />
+          </div>
+          <small>
+            {lowConfidenceWords.length
+              ? `优先回听：${formatLowConfidenceWords(lowConfidenceWords)}`
+              : "本轮暂未发现明显低置信词。"}
+            {pauseEvents.length ? ` 明显停顿 ${pauseEvents.length} 处。` : ""}
+          </small>
+          {pronunciationNotes[0] && <small>{pronunciationNotes[0]}</small>}
+        </>
+      )}
+    </section>
+  );
+}
+
 function isCustomScenario(scenario: Scenario) {
   return scenario.id.startsWith("custom-") || scenario.id.startsWith("custom_");
+}
+
+function createTurnTranscriptEvidence(transcript: TranscriptResult | null): Pick<
+  Turn,
+  | "transcriptConfidence"
+  | "transcriptProvider"
+  | "speechRateWpm"
+  | "lowConfidenceWords"
+  | "pauseEvents"
+  | "pronunciationNotes"
+> {
+  if (!transcript) return {};
+  return {
+    transcriptConfidence: transcript.confidence,
+    transcriptProvider: transcript.provider,
+    speechRateWpm: transcript.speechRateWpm,
+    lowConfidenceWords: transcript.lowConfidenceWords,
+    pauseEvents: transcript.pauseEvents,
+    pronunciationNotes: transcript.pronunciationNotes
+  };
 }
 
 function createJourneySteps({
@@ -634,6 +818,24 @@ function createJourneySteps({
       status: hasReport ? "done" : reportActive ? "active" : "waiting"
     }
   ];
+}
+
+function formatPercent(value: number) {
+  return `${Math.round(value * 100)}%`;
+}
+
+function formatLowConfidenceWords(words: TranscriptResult["lowConfidenceWords"]) {
+  return words
+    .slice(0, 4)
+    .map((word) => word.punctuatedWord || word.word)
+    .join("、");
+}
+
+function getDimensionEvidence(
+  report: ReportResult,
+  dimensionId: ReportResult["dimensions"][number]["id"]
+) {
+  return report.dimensionEvidence.find((item) => item.dimensionId === dimensionId)?.evidenceZh ?? "本维度暂无证据说明。";
 }
 
 function LearningJourneyCard({

@@ -9,7 +9,7 @@ import {
   type AppOptions,
   type RuntimeSettingsInput
 } from "./config";
-import { findScenarioTask, scenarios, type Scenario } from "./data";
+import { createTaskMetadata, findScenarioTask, scenarios, type Scenario } from "./data";
 import {
   generateReportWithLlm,
   generateTurnWithLlm,
@@ -37,7 +37,14 @@ function normalizeCustomScenario(value: unknown): Scenario | null {
         titleEn: task.titleEn || "Custom practice",
         aiRoleZh: task.aiRoleZh || "AI 场景教练",
         focus: task.focus || "把目标说清楚",
-        openingQuestion: task.openingQuestion
+        openingQuestion: task.openingQuestion,
+        ...createTaskMetadata({
+          focus: task.focus || "把目标说清楚",
+          difficulty: task.difficulty,
+          roundGoals: task.roundGoals,
+          sampleAnswers: task.sampleAnswers,
+          commonMistakes: task.commonMistakes
+        })
       }
     ]
   };

@@ -17,6 +17,22 @@ export const transcriptWordSchema = z.object({
   punctuatedWord: z.string().optional()
 });
 
+export const lowConfidenceWordSchema = z.object({
+  word: z.string(),
+  start: z.number(),
+  end: z.number(),
+  confidence: z.number(),
+  punctuatedWord: z.string().optional()
+});
+
+export const pauseEventSchema = z.object({
+  afterWord: z.string(),
+  beforeWord: z.string(),
+  start: z.number(),
+  end: z.number(),
+  durationSec: z.number()
+});
+
 export const transcriptResultSchema = z.object({
   text: z.string(),
   confidence: z.number(),
@@ -24,6 +40,10 @@ export const transcriptResultSchema = z.object({
   durationSec: z.number(),
   providerLatencyMs: z.number(),
   provider: z.string(),
+  speechRateWpm: z.number(),
+  lowConfidenceWords: z.array(lowConfidenceWordSchema),
+  pauseEvents: z.array(pauseEventSchema),
+  pronunciationNotes: z.array(z.string()),
   fallback: z.boolean().optional(),
   fallbackReason: z.string().optional()
 });
@@ -47,8 +67,16 @@ export const speechAudioResultSchema = z.object({
   fallback: z.boolean().optional()
 });
 
+export const scoreDimensionIdSchema = z.enum([
+  "pronunciation",
+  "fluency",
+  "grammar",
+  "expression",
+  "taskCompletion"
+]);
+
 export const scoreDimensionSchema = z.object({
-  id: z.enum(["pronunciation", "fluency", "grammar", "expression", "taskCompletion"]),
+  id: scoreDimensionIdSchema,
   labelZh: z.string(),
   labelEn: z.string(),
   score: z.number(),
@@ -61,6 +89,12 @@ export const correctionSchema = z.object({
   explanationZh: z.string()
 });
 
+export const dimensionEvidenceSchema = z.object({
+  dimensionId: scoreDimensionIdSchema,
+  evidenceZh: z.string(),
+  turnRefs: z.array(z.number())
+});
+
 export const reportResultSchema = z.object({
   reportId: z.string(),
   totalScore: z.number(),
@@ -68,6 +102,7 @@ export const reportResultSchema = z.object({
   summaryZh: z.string(),
   corrections: z.array(correctionSchema),
   suggestions: z.array(z.string()),
+  dimensionEvidence: z.array(dimensionEvidenceSchema),
   coachCommentZh: z.string(),
   provider: z.string(),
   fallback: z.boolean().optional()
@@ -78,3 +113,4 @@ export type TranscriptResult = z.infer<typeof transcriptResultSchema>;
 export type DialogueTurnResult = z.infer<typeof dialogueTurnResultSchema>;
 export type SpeechAudioResult = z.infer<typeof speechAudioResultSchema>;
 export type ReportResult = z.infer<typeof reportResultSchema>;
+export type ScoreDimensionId = z.infer<typeof scoreDimensionIdSchema>;
