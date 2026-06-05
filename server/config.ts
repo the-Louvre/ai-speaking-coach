@@ -2,10 +2,10 @@ import type { LiveConfig } from "./providers/liveProviders";
 import "./env";
 
 export type ProviderPreset = "global-mixed" | "china-qwen" | "custom";
-export type AsrProvider = "mock" | "deepgram" | "aliyun-isi" | "iflytek";
+export type AsrProvider = "mock" | "deepgram" | "qwen-asr" | "aliyun-isi" | "iflytek";
 export type LlmProvider = "openai" | "qwen" | "doubao" | "kimi" | "custom-openai-compatible";
-export type TtsProvider = "mock" | "cartesia" | "aliyun-isi" | "iflytek";
-export type PronunciationProvider = "rule" | "iflytek";
+export type TtsProvider = "mock" | "cartesia" | "qwen-tts" | "aliyun-isi" | "iflytek";
+export type PronunciationProvider = "rule" | "qwen" | "iflytek";
 
 export type AppOptions = {
   apiMode?: "mock" | "live";
@@ -16,6 +16,7 @@ export type RuntimeSettingsInput = {
   providerPreset?: ProviderPreset;
   asrProvider?: AsrProvider;
   asrApiKey?: string;
+  asrModel?: string;
   deepgramApiKey?: string;
   llmProvider?: LlmProvider;
   llmApiKey?: string;
@@ -25,6 +26,7 @@ export type RuntimeSettingsInput = {
   openaiModel?: string;
   ttsProvider?: TtsProvider;
   ttsApiKey?: string;
+  ttsModel?: string;
   cartesiaApiKey?: string;
   cartesiaVersion?: string;
   cartesiaModel?: string;
@@ -36,6 +38,7 @@ type ProviderDefaults = Pick<
   LiveConfig,
   | "providerPreset"
   | "asrProvider"
+  | "asrModel"
   | "llmProvider"
   | "llmBaseUrl"
   | "llmModel"
@@ -48,18 +51,20 @@ type ProviderDefaults = Pick<
 const PRESETS: Record<ProviderPreset, ProviderDefaults> = {
   "china-qwen": {
     providerPreset: "china-qwen",
-    asrProvider: "mock",
+    asrProvider: "qwen-asr",
+    asrModel: "qwen3-asr-flash",
     llmProvider: "qwen",
     llmBaseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
     llmModel: "qwen-plus",
-    ttsProvider: "mock",
+    ttsProvider: "qwen-tts",
     ttsVersion: "",
-    ttsModel: "mock",
-    pronunciationProvider: "rule"
+    ttsModel: "qwen3-tts-flash",
+    pronunciationProvider: "qwen"
   },
   "global-mixed": {
     providerPreset: "global-mixed",
     asrProvider: "deepgram",
+    asrModel: "nova-3",
     llmProvider: "openai",
     llmBaseUrl: "",
     llmModel: "gpt-4o-mini",
@@ -70,14 +75,15 @@ const PRESETS: Record<ProviderPreset, ProviderDefaults> = {
   },
   custom: {
     providerPreset: "custom",
-    asrProvider: "mock",
+    asrProvider: "qwen-asr",
+    asrModel: "qwen3-asr-flash",
     llmProvider: "custom-openai-compatible",
     llmBaseUrl: "",
     llmModel: "qwen-plus",
-    ttsProvider: "mock",
+    ttsProvider: "qwen-tts",
     ttsVersion: "",
-    ttsModel: "mock",
-    pronunciationProvider: "rule"
+    ttsModel: "qwen3-tts-flash",
+    pronunciationProvider: "qwen"
   }
 };
 
@@ -92,7 +98,9 @@ function readProviderPreset(value: string | undefined): ProviderPreset {
 }
 
 function readAsrProvider(value: string | undefined, fallback: AsrProvider): AsrProvider {
-  return isOneOf(value, ["mock", "deepgram", "aliyun-isi", "iflytek"] as const) ? value : fallback;
+  return isOneOf(value, ["mock", "deepgram", "qwen-asr", "aliyun-isi", "iflytek"] as const)
+    ? value
+    : fallback;
 }
 
 function readLlmProvider(value: string | undefined, fallback: LlmProvider): LlmProvider {
@@ -102,21 +110,23 @@ function readLlmProvider(value: string | undefined, fallback: LlmProvider): LlmP
 }
 
 function readTtsProvider(value: string | undefined, fallback: TtsProvider): TtsProvider {
-  return isOneOf(value, ["mock", "cartesia", "aliyun-isi", "iflytek"] as const) ? value : fallback;
+  return isOneOf(value, ["mock", "cartesia", "qwen-tts", "aliyun-isi", "iflytek"] as const)
+    ? value
+    : fallback;
 }
 
 function readPronunciationProvider(
   value: string | undefined,
   fallback: PronunciationProvider
 ): PronunciationProvider {
-  return isOneOf(value, ["rule", "iflytek"] as const) ? value : fallback;
+  return isOneOf(value, ["rule", "qwen", "iflytek"] as const) ? value : fallback;
 }
 
 function readLlmApiKey(provider: LlmProvider): string | undefined {
+  if (provider === "qwen") return process.env.DASHSCOPE_API_KEY || process.env.LLM_API_KEY;
+  if (provider === "doubao") return process.env.ARK_API_KEY || process.env.LLM_API_KEY;
+  if (provider === "kimi") return process.env.MOONSHOT_API_KEY || process.env.LLM_API_KEY;
   if (process.env.LLM_API_KEY) return process.env.LLM_API_KEY;
-  if (provider === "qwen") return process.env.DASHSCOPE_API_KEY;
-  if (provider === "doubao") return process.env.ARK_API_KEY;
-  if (provider === "kimi") return process.env.MOONSHOT_API_KEY;
   return process.env.OPENAI_API_KEY;
 }
 
@@ -124,15 +134,21 @@ export function getConfig(options: AppOptions = {}): LiveConfig {
   const apiMode = options.apiMode ?? (process.env.API_MODE === "live" ? "live" : "mock");
   const providerPreset = readProviderPreset(process.env.API_PROVIDER_PRESET);
   const preset = PRESETS[providerPreset];
+  const asrProvider = readAsrProvider(process.env.ASR_PROVIDER, preset.asrProvider);
   const llmProvider = readLlmProvider(process.env.LLM_PROVIDER, preset.llmProvider);
   const llmModel = process.env.LLM_MODEL || process.env.OPENAI_LLM_MODEL || preset.llmModel;
   const ttsModel = process.env.TTS_MODEL || process.env.CARTESIA_TTS_MODEL || preset.ttsModel;
+  const dashscopeApiKey = process.env.DASHSCOPE_API_KEY;
 
   return {
     apiMode,
     providerPreset,
-    asrProvider: readAsrProvider(process.env.ASR_PROVIDER, preset.asrProvider),
-    asrApiKey: process.env.ASR_API_KEY || process.env.DEEPGRAM_API_KEY,
+    asrProvider,
+    asrModel: process.env.ASR_MODEL || preset.asrModel,
+    asrApiKey:
+      process.env.ASR_API_KEY ||
+      (asrProvider === "qwen-asr" ? dashscopeApiKey : undefined) ||
+      process.env.DEEPGRAM_API_KEY,
     deepgramApiKey: process.env.DEEPGRAM_API_KEY || process.env.ASR_API_KEY,
     llmProvider,
     llmApiKey: readLlmApiKey(llmProvider),
@@ -141,7 +157,12 @@ export function getConfig(options: AppOptions = {}): LiveConfig {
     openaiApiKey: process.env.OPENAI_API_KEY,
     openaiModel: process.env.OPENAI_LLM_MODEL || llmModel,
     ttsProvider: readTtsProvider(process.env.TTS_PROVIDER, preset.ttsProvider),
-    ttsApiKey: process.env.TTS_API_KEY || process.env.CARTESIA_API_KEY,
+    ttsApiKey:
+      process.env.TTS_API_KEY ||
+      (readTtsProvider(process.env.TTS_PROVIDER, preset.ttsProvider) === "qwen-tts"
+        ? dashscopeApiKey
+        : undefined) ||
+      process.env.CARTESIA_API_KEY,
     ttsVersion: process.env.TTS_VERSION || process.env.CARTESIA_VERSION || preset.ttsVersion,
     ttsModel,
     ttsVoiceId: process.env.TTS_VOICE_ID || process.env.CARTESIA_VOICE_ID,
@@ -180,12 +201,14 @@ export function applyRuntimeSettings(config: LiveConfig, input: RuntimeSettingsI
   }
 
   const asrApiKey = cleanValue(input.asrApiKey);
+  const asrModel = cleanValue(input.asrModel);
   const deepgramApiKey = cleanValue(input.deepgramApiKey);
   const llmApiKey = cleanValue(input.llmApiKey);
   const llmBaseUrl = cleanValue(input.llmBaseUrl);
   const llmModel = cleanValue(input.llmModel);
   const openaiApiKey = cleanValue(input.openaiApiKey);
   const ttsApiKey = cleanValue(input.ttsApiKey);
+  const ttsModel = cleanValue(input.ttsModel);
   const cartesiaApiKey = cleanValue(input.cartesiaApiKey);
   const openaiModel = cleanValue(input.openaiModel);
   const cartesiaVersion = cleanValue(input.cartesiaVersion);
@@ -196,6 +219,7 @@ export function applyRuntimeSettings(config: LiveConfig, input: RuntimeSettingsI
     config.asrApiKey = asrApiKey || deepgramApiKey;
     config.deepgramApiKey = deepgramApiKey || asrApiKey;
   }
+  if (asrModel) config.asrModel = asrModel;
   if (llmApiKey || openaiApiKey) {
     config.llmApiKey = llmApiKey || openaiApiKey;
     config.openaiApiKey = openaiApiKey || llmApiKey;
@@ -213,9 +237,9 @@ export function applyRuntimeSettings(config: LiveConfig, input: RuntimeSettingsI
     config.ttsVersion = cartesiaVersion;
     config.cartesiaVersion = cartesiaVersion;
   }
-  if (cartesiaModel) {
-    config.ttsModel = cartesiaModel;
-    config.cartesiaModel = cartesiaModel;
+  if (ttsModel || cartesiaModel) {
+    config.ttsModel = ttsModel || cartesiaModel || config.ttsModel;
+    config.cartesiaModel = cartesiaModel || ttsModel || config.cartesiaModel;
   }
   if (cartesiaVoiceId) {
     config.ttsVoiceId = cartesiaVoiceId;
@@ -231,6 +255,7 @@ export function getRuntimeSettings(config: LiveConfig) {
     editable: {
       providerPreset: config.providerPreset,
       asrProvider: config.asrProvider,
+      asrModel: config.asrModel,
       llmProvider: config.llmProvider,
       llmBaseUrl: config.llmBaseUrl || "",
       llmModel: config.llmModel,
@@ -249,19 +274,25 @@ export function getRuntimeSettings(config: LiveConfig) {
 
 export function getHealth(config: LiveConfig) {
   const asrIsMock = config.asrProvider === "mock";
-  const asrIsReady = asrIsMock || (config.asrProvider === "deepgram" && Boolean(config.deepgramApiKey));
-  const asrIsImplemented = asrIsMock || config.asrProvider === "deepgram";
+  const asrIsReady =
+    asrIsMock ||
+    (config.asrProvider === "deepgram" && Boolean(config.deepgramApiKey)) ||
+    (config.asrProvider === "qwen-asr" && Boolean(config.asrApiKey));
+  const asrIsImplemented = asrIsMock || config.asrProvider === "deepgram" || config.asrProvider === "qwen-asr";
   const ttsIsMock = config.ttsProvider === "mock";
   const ttsIsReady =
-    ttsIsMock || (config.ttsProvider === "cartesia" && Boolean(config.ttsApiKey && config.ttsVoiceId));
-  const ttsIsImplemented = ttsIsMock || config.ttsProvider === "cartesia";
+    ttsIsMock ||
+    (config.ttsProvider === "cartesia" && Boolean(config.ttsApiKey && config.ttsVoiceId)) ||
+    (config.ttsProvider === "qwen-tts" && Boolean(config.ttsApiKey));
+  const ttsIsImplemented = ttsIsMock || config.ttsProvider === "cartesia" || config.ttsProvider === "qwen-tts";
   const llmIsReady = Boolean(config.llmApiKey);
 
   const asr = {
     provider: config.asrProvider,
     configured: asrIsReady,
     active: config.apiMode === "live" ? asrIsReady && asrIsImplemented : asrIsMock,
-    status: !asrIsImplemented ? "planned" : asrIsReady ? "ready" : "missing-key"
+    status: !asrIsImplemented ? "planned" : asrIsReady ? "ready" : "missing-key",
+    model: config.asrModel
   };
   const llm = {
     provider: config.llmProvider,
@@ -287,13 +318,16 @@ export function getHealth(config: LiveConfig) {
       tts,
       pronunciation: {
         provider: config.pronunciationProvider,
-        configured: config.pronunciationProvider === "rule",
-        active: config.pronunciationProvider === "rule",
-        status: config.pronunciationProvider === "rule" ? "ready" : "planned"
+        configured: config.pronunciationProvider === "rule" || Boolean(config.llmApiKey),
+        active:
+          config.pronunciationProvider === "rule" ||
+          (config.apiMode === "live" && config.pronunciationProvider === "qwen" && Boolean(config.llmApiKey)),
+        status:
+          config.pronunciationProvider === "rule" || Boolean(config.llmApiKey) ? "ready" : "missing-key"
       },
       deepgram: {
-        configured: Boolean(config.deepgramApiKey),
-        active: config.apiMode === "live" && Boolean(config.deepgramApiKey)
+        configured: config.asrProvider === "deepgram" && Boolean(config.deepgramApiKey),
+        active: config.apiMode === "live" && config.asrProvider === "deepgram" && Boolean(config.deepgramApiKey)
       },
       openai: {
         configured: Boolean(config.llmApiKey),
@@ -301,8 +335,11 @@ export function getHealth(config: LiveConfig) {
         model: config.llmModel
       },
       cartesia: {
-        configured: Boolean(config.ttsApiKey && config.ttsVoiceId),
-        active: config.apiMode === "live" && Boolean(config.ttsApiKey && config.ttsVoiceId),
+        configured: config.ttsProvider === "cartesia" && Boolean(config.ttsApiKey && config.ttsVoiceId),
+        active:
+          config.apiMode === "live" &&
+          config.ttsProvider === "cartesia" &&
+          Boolean(config.ttsApiKey && config.ttsVoiceId),
         model: config.ttsModel
       }
     },

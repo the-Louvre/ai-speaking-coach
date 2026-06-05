@@ -10,9 +10,9 @@ describe("runtime API settings", () => {
 
     expect(settings.body.mode).toBe("mock");
     expect(settings.body.editable.providerPreset).toBe("china-qwen");
-    expect(settings.body.providers.asr.provider).toBe("mock");
+    expect(settings.body.providers.asr.provider).toBe("qwen-asr");
     expect(settings.body.providers.llm.provider).toBe("qwen");
-    expect(settings.body.providers.tts.provider).toBe("mock");
+    expect(settings.body.providers.tts.provider).toBe("qwen-tts");
   });
 
   it("applies the China Qwen preset without exposing submitted secrets", async () => {
@@ -34,8 +34,8 @@ describe("runtime API settings", () => {
     expect(update.body.providers.llm.active).toBe(true);
     expect(update.body.providers.llm.model).toBe("qwen-plus");
     expect(update.body.providers.llm.baseUrl).toBe("https://dashscope.aliyuncs.com/compatible-mode/v1");
-    expect(update.body.providers.asr.provider).toBe("mock");
-    expect(update.body.providers.tts.provider).toBe("mock");
+    expect(update.body.providers.asr.provider).toBe("qwen-asr");
+    expect(update.body.providers.tts.provider).toBe("qwen-tts");
     expect(update.text).not.toContain("dashscope_test_secret");
   });
 
@@ -61,6 +61,36 @@ describe("runtime API settings", () => {
     expect(update.text).not.toContain("moonshot_test_secret");
   });
 
+  it("accepts Qwen speech providers for live experiments without leaking keys", async () => {
+    const app = createApp({ apiMode: "mock" });
+
+    const update = await request(app)
+      .post("/api/settings")
+      .send({
+        apiMode: "live",
+        providerPreset: "custom",
+        asrProvider: "qwen-asr",
+        asrApiKey: "dashscope_speech_secret",
+        llmProvider: "qwen",
+        llmApiKey: "dashscope_speech_secret",
+        llmBaseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        llmModel: "qwen-plus",
+        ttsProvider: "qwen-tts",
+        ttsApiKey: "dashscope_speech_secret",
+        ttsModel: "qwen3-tts-flash",
+        pronunciationProvider: "qwen"
+      })
+      .expect(200);
+
+    expect(update.body.providers.asr.provider).toBe("qwen-asr");
+    expect(update.body.providers.asr.configured).toBe(true);
+    expect(update.body.providers.tts.provider).toBe("qwen-tts");
+    expect(update.body.providers.tts.configured).toBe(true);
+    expect(update.body.providers.pronunciation.provider).toBe("qwen");
+    expect(update.body.providers.pronunciation.configured).toBe(true);
+    expect(update.text).not.toContain("dashscope_speech_secret");
+  });
+
   it("updates provider configuration without exposing submitted secret values", async () => {
     const app = createApp({ apiMode: "mock" });
 
@@ -68,6 +98,7 @@ describe("runtime API settings", () => {
       .post("/api/settings")
       .send({
         apiMode: "live",
+        providerPreset: "global-mixed",
         deepgramApiKey: "dg_test_secret",
         openaiApiKey: "sk-test-secret",
         openaiModel: "gpt-4o-mini",

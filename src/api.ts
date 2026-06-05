@@ -19,7 +19,7 @@ export type SessionStart = {
 export type HealthResult = {
   mode: "mock" | "live";
   providers: {
-    asr: { provider: string; configured: boolean; active: boolean; status: string };
+    asr: { provider: string; configured: boolean; active: boolean; status: string; model: string };
     llm: {
       provider: string;
       configured: boolean;
@@ -41,6 +41,7 @@ export type RuntimeSettingsResult = HealthResult & {
   editable: {
     providerPreset: string;
     asrProvider: string;
+    asrModel: string;
     llmProvider: string;
     llmBaseUrl: string;
     llmModel: string;
@@ -58,8 +59,9 @@ export type RuntimeSettingsResult = HealthResult & {
 
 export type RuntimeSettingsInput = {
   apiMode?: "mock" | "live";
-  providerPreset?: string;
-  asrProvider?: string;
+    providerPreset?: string;
+    asrProvider?: string;
+    asrModel?: string;
   asrApiKey?: string;
   deepgramApiKey?: string;
   llmProvider?: string;

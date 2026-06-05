@@ -7,6 +7,7 @@ type SettingsForm = {
   providerPreset: string;
   asrProvider: string;
   asrApiKey: string;
+  asrModel: string;
   llmProvider: string;
   llmApiKey: string;
   llmBaseUrl: string;
@@ -21,17 +22,19 @@ type SettingsForm = {
 
 const PRESET_DEFAULTS: Record<string, Partial<SettingsForm>> = {
   "china-qwen": {
-    asrProvider: "mock",
+    asrProvider: "qwen-asr",
+    asrModel: "qwen3-asr-flash",
     llmProvider: "qwen",
     llmBaseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
     llmModel: "qwen-plus",
-    ttsProvider: "mock",
+    ttsProvider: "qwen-tts",
     ttsVersion: "",
-    ttsModel: "mock",
-    pronunciationProvider: "rule"
+    ttsModel: "qwen3-tts-flash",
+    pronunciationProvider: "qwen"
   },
   "global-mixed": {
     asrProvider: "deepgram",
+    asrModel: "nova-3",
     llmProvider: "openai",
     llmBaseUrl: "",
     llmModel: "gpt-4o-mini",
@@ -47,7 +50,7 @@ const PRESETS = [
   {
     id: "china-qwen",
     title: "国内初跑",
-    description: "通义千问负责对话和报告，语音先用 mock 兜底。"
+    description: "通义千问负责转写、对话、评估和语音生成。"
   },
   {
     id: "global-mixed",
@@ -63,6 +66,7 @@ const PRESETS = [
 
 const ASR_OPTIONS = [
   ["mock", "Mock 演示转写"],
+  ["qwen-asr", "通义千问 ASR"],
   ["deepgram", "Deepgram Nova-3"],
   ["aliyun-isi", "阿里云智能语音"],
   ["iflytek", "讯飞语音识别"]
@@ -78,6 +82,7 @@ const LLM_OPTIONS = [
 
 const TTS_OPTIONS = [
   ["mock", "Mock 播放状态"],
+  ["qwen-tts", "通义千问 TTS"],
   ["cartesia", "Cartesia Sonic"],
   ["aliyun-isi", "阿里云语音合成"],
   ["iflytek", "讯飞语音合成"]
@@ -85,6 +90,7 @@ const TTS_OPTIONS = [
 
 const PRONUNCIATION_OPTIONS = [
   ["rule", "规则聚合评分"],
+  ["qwen", "通义千问文本评估"],
   ["iflytek", "讯飞语音评测"]
 ];
 
@@ -92,18 +98,19 @@ function createForm(settings: RuntimeSettingsResult | null): SettingsForm {
   return {
     apiMode: settings?.mode ?? "mock",
     providerPreset: settings?.editable.providerPreset ?? "china-qwen",
-    asrProvider: settings?.editable.asrProvider ?? "mock",
+    asrProvider: settings?.editable.asrProvider ?? "qwen-asr",
     asrApiKey: "",
+    asrModel: settings?.editable.asrModel ?? "qwen3-asr-flash",
     llmProvider: settings?.editable.llmProvider ?? "qwen",
     llmApiKey: "",
     llmBaseUrl: settings?.editable.llmBaseUrl ?? "https://dashscope.aliyuncs.com/compatible-mode/v1",
     llmModel: settings?.editable.llmModel ?? "qwen-plus",
-    ttsProvider: settings?.editable.ttsProvider ?? "mock",
+    ttsProvider: settings?.editable.ttsProvider ?? "qwen-tts",
     ttsApiKey: "",
     ttsVersion: settings?.editable.ttsVersion ?? "",
-    ttsModel: settings?.editable.ttsModel ?? "mock",
+    ttsModel: settings?.editable.ttsModel ?? "qwen3-tts-flash",
     ttsVoiceId: settings?.editable.ttsVoiceId ?? "",
-    pronunciationProvider: settings?.editable.pronunciationProvider ?? "rule"
+    pronunciationProvider: settings?.editable.pronunciationProvider ?? "qwen"
   };
 }
 
@@ -166,7 +173,9 @@ export function ApiSettingsPanel({
   const providerItems = [
     {
       label: "ASR",
-      value: optionLabel(ASR_OPTIONS, settings?.providers.asr.provider ?? form.asrProvider),
+      value: `${optionLabel(ASR_OPTIONS, settings?.providers.asr.provider ?? form.asrProvider)} / ${
+        settings?.providers.asr.model ?? form.asrModel
+      }`,
       status: settings?.providers.asr.status
     },
     {
@@ -270,6 +279,13 @@ export function ApiSettingsPanel({
               value={form.asrApiKey}
               placeholder="留空则保持当前后端配置"
               onChange={(event) => setForm((current) => ({ ...current, asrApiKey: event.target.value }))}
+            />
+          </label>
+          <label>
+            ASR Model
+            <input
+              value={form.asrModel}
+              onChange={(event) => setForm((current) => ({ ...current, asrModel: event.target.value }))}
             />
           </label>
           <label>
