@@ -19,6 +19,17 @@ export type SessionStart = {
 export type HealthResult = {
   mode: "mock" | "live";
   providers: {
+    asr: { provider: string; configured: boolean; active: boolean; status: string };
+    llm: {
+      provider: string;
+      configured: boolean;
+      active: boolean;
+      model: string;
+      baseUrl: string;
+      status: string;
+    };
+    tts: { provider: string; configured: boolean; active: boolean; model: string; status: string };
+    pronunciation: { provider: string; configured: boolean; active: boolean; status: string };
     deepgram: { configured: boolean; active: boolean };
     openai: { configured: boolean; active: boolean; model: string };
     cartesia: { configured: boolean; active: boolean; model: string };
@@ -28,6 +39,16 @@ export type HealthResult = {
 
 export type RuntimeSettingsResult = HealthResult & {
   editable: {
+    providerPreset: string;
+    asrProvider: string;
+    llmProvider: string;
+    llmBaseUrl: string;
+    llmModel: string;
+    ttsProvider: string;
+    ttsVersion: string;
+    ttsModel: string;
+    ttsVoiceId: string;
+    pronunciationProvider: string;
     openaiModel: string;
     cartesiaVersion: string;
     cartesiaModel: string;
@@ -37,13 +58,23 @@ export type RuntimeSettingsResult = HealthResult & {
 
 export type RuntimeSettingsInput = {
   apiMode?: "mock" | "live";
+  providerPreset?: string;
+  asrProvider?: string;
+  asrApiKey?: string;
   deepgramApiKey?: string;
+  llmProvider?: string;
+  llmApiKey?: string;
+  llmBaseUrl?: string;
+  llmModel?: string;
   openaiApiKey?: string;
   openaiModel?: string;
+  ttsProvider?: string;
+  ttsApiKey?: string;
   cartesiaApiKey?: string;
   cartesiaVersion?: string;
   cartesiaModel?: string;
   cartesiaVoiceId?: string;
+  pronunciationProvider?: string;
 };
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {

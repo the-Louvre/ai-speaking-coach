@@ -11,8 +11,8 @@ import {
 } from "./config";
 import { findScenarioTask, scenarios, type Scenario } from "./data";
 import {
-  generateReportWithOpenAI,
-  generateTurnWithOpenAI,
+  generateReportWithLlm,
+  generateTurnWithLlm,
   synthesizeWithCartesia,
   transcribeWithDeepgram
 } from "./providers/liveProviders";
@@ -91,7 +91,7 @@ export function createApp(options: AppOptions = {}) {
   });
 
   app.post("/api/llm/turn", async (req, res) => {
-    const result = await generateTurnWithOpenAI(
+    const result = await generateTurnWithLlm(
       {
         scenarioId: String(req.body?.scenarioId || "interview"),
         taskId: String(req.body?.taskId || "internship-intro"),
@@ -113,7 +113,7 @@ export function createApp(options: AppOptions = {}) {
   });
 
   app.post("/api/report/generate", async (req, res) => {
-    const result = await generateReportWithOpenAI(req.body, config);
+    const result = await generateReportWithLlm(req.body, config);
     res.json(result);
   });
 

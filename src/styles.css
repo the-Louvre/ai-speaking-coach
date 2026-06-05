@@ -785,7 +785,8 @@ h3 {
 }
 
 textarea,
-.settings-grid input {
+.settings-grid input,
+.settings-grid select {
   width: 100%;
   min-width: 0;
   border: 2px solid var(--swan);
@@ -810,8 +811,26 @@ textarea {
   padding: 0 14px;
 }
 
+.settings-grid select {
+  min-height: 46px;
+  padding: 0 38px 0 14px;
+  font-weight: 900;
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--eel) 50%),
+    linear-gradient(135deg, var(--eel) 50%, transparent 50%);
+  background-position:
+    calc(100% - 20px) 50%,
+    calc(100% - 14px) 50%;
+  background-size:
+    6px 6px,
+    6px 6px;
+  background-repeat: no-repeat;
+}
+
 textarea:focus,
-.settings-grid input:focus {
+.settings-grid input:focus,
+.settings-grid select:focus {
   border-color: var(--feather-green);
   box-shadow: 0 0 0 4px rgba(88, 204, 2, 0.16);
 }
@@ -1439,6 +1458,44 @@ textarea:focus,
   background: var(--feather-green);
 }
 
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0 0;
+}
+
+.preset-card {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  min-height: 118px;
+  padding: 16px;
+  border: 2px solid var(--swan);
+  border-radius: 24px;
+  color: var(--eel);
+  background: var(--snow);
+  text-align: left;
+  box-shadow: 0 4px 0 rgba(229, 229, 229, 0.7);
+}
+
+.preset-card strong {
+  font-size: 1rem;
+  font-weight: 950;
+}
+
+.preset-card span {
+  color: var(--wolf);
+  font-size: 0.88rem;
+  line-height: 1.45;
+  font-weight: 850;
+}
+
+.preset-card.selected {
+  border-color: var(--feather-green);
+  box-shadow: 0 4px 0 rgba(88, 204, 2, 0.24);
+}
+
 .provider-status {
   display: flex;
   flex-wrap: wrap;
@@ -1466,6 +1523,27 @@ textarea:focus,
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
+}
+
+.settings-section-title {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 20px 0 12px;
+  color: var(--eel);
+}
+
+.settings-section-title span {
+  font-weight: 950;
+}
+
+.settings-section-title small {
+  max-width: 440px;
+  color: var(--wolf);
+  font-weight: 850;
+  line-height: 1.45;
+  text-align: right;
 }
 
 .settings-grid label {
@@ -1616,8 +1694,19 @@ textarea:focus,
   .task-list,
   .custom-form-grid,
   .score-grid,
+  .preset-grid,
   .settings-grid {
     grid-template-columns: 1fr;
+  }
+
+  .settings-section-title {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .settings-section-title small {
+    max-width: none;
+    text-align: left;
   }
 
   .journey-metrics,

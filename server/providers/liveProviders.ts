@@ -1,29 +1,58 @@
 import OpenAI from "openai";
 import type {
+  AsrProvider,
+  LlmProvider,
+  PronunciationProvider,
+  ProviderPreset,
+  TtsProvider
+} from "../config";
+import type {
   DialogueTurnResult,
   ReportResult,
   SpeechAudioResult,
   TranscriptResult
 } from "../../shared/schemas";
 import { dialogueTurnResultSchema, reportResultSchema } from "../../shared/schemas";
-import { reportJsonSchema } from "./reportSchema";
 import { mockDialogueTurn, mockReport, mockSpeech, mockTranscribe } from "./mockProviders";
 
 export type LiveConfig = {
   apiMode: "mock" | "live";
+  providerPreset: ProviderPreset;
+  asrProvider: AsrProvider;
+  asrApiKey?: string;
   deepgramApiKey?: string;
+  llmProvider: LlmProvider;
+  llmApiKey?: string;
+  llmBaseUrl?: string;
+  llmModel: string;
   openaiApiKey?: string;
   openaiModel: string;
+  ttsProvider: TtsProvider;
+  ttsApiKey?: string;
+  ttsVersion: string;
+  ttsModel: string;
+  ttsVoiceId?: string;
   cartesiaApiKey?: string;
   cartesiaVersion: string;
   cartesiaModel: string;
   cartesiaVoiceId?: string;
+  pronunciationProvider: PronunciationProvider;
 };
 
 export async function transcribeWithDeepgram(
   audio: Express.Multer.File | undefined,
   config: LiveConfig
 ): Promise<TranscriptResult> {
+  if (config.asrProvider !== "deepgram") {
+    return {
+      ...mockTranscribe(),
+      fallbackReason:
+        config.asrProvider === "mock"
+          ? "ASR provider is mock"
+          : `${config.asrProvider} ASR live adapter is planned`
+    };
+  }
+
   if (config.apiMode !== "live" || !config.deepgramApiKey || !audio) {
     return {
       ...mockTranscribe(),
@@ -92,7 +121,52 @@ export async function transcribeWithDeepgram(
   }
 }
 
-export async function generateTurnWithOpenAI(
+function parseJsonContent(content: string): unknown {
+  const trimmed = content.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  const source = fenced?.[1] ?? trimmed;
+  const start = source.indexOf("{");
+  const end = source.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    return JSON.parse(source.slice(start, end + 1));
+  }
+  return JSON.parse(source);
+}
+
+function createOpenAiCompatibleClient(config: LiveConfig) {
+  if (!config.llmApiKey) return null;
+  return new OpenAI({
+    apiKey: config.llmApiKey,
+    baseURL: config.llmBaseUrl || undefined
+  });
+}
+
+async function createJsonChatCompletion(
+  config: LiveConfig,
+  system: string,
+  user: string
+): Promise<unknown> {
+  const client = createOpenAiCompatibleClient(config);
+  if (!client) {
+    throw new Error(`${config.llmProvider} is not configured`);
+  }
+
+  const completion = await client.chat.completions.create({
+    model: config.llmModel,
+    temperature: 0.4,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user }
+    ]
+  });
+  const content = completion.choices[0]?.message?.content;
+  if (!content) {
+    throw new Error(`${config.llmProvider} returned empty content`);
+  }
+  return parseJsonContent(content);
+}
+
+export async function generateTurnWithLlm(
   input: {
     scenarioId: string;
     taskId: string;
@@ -105,52 +179,34 @@ export async function generateTurnWithOpenAI(
   },
   config: LiveConfig
 ): Promise<DialogueTurnResult> {
-  if (config.apiMode !== "live" || !config.openaiApiKey) {
+  if (config.apiMode !== "live" || !config.llmApiKey) {
     return mockDialogueTurn(input.userText, input.round);
   }
 
   try {
-    const client = new OpenAI({ apiKey: config.openaiApiKey });
-    const response = await client.responses.create({
-      model: config.openaiModel,
-      instructions:
-        "You are an English speaking coach for Chinese learners. Return concise JSON only.",
-      input: `Scenario: ${input.scenarioLabel || input.scenarioId}
+    const json = await createJsonChatCompletion(
+      config,
+      [
+        "You are an English speaking coach for Chinese learners.",
+        "Return one strict JSON object only. Do not include Markdown.",
+        "The JSON keys must be aiText, hintZh, coachState, correctionPreview, nextRoundGoal, provider.",
+        "coachState must be asking.",
+        `provider must be ${config.llmProvider}.`
+      ].join(" "),
+      `Scenario: ${input.scenarioLabel || input.scenarioId}
 Task: ${input.taskTitle || input.taskId}
 AI role: ${input.aiRoleZh || "AI speaking coach"}
 Learning focus: ${input.taskFocus || "help the learner answer clearly and naturally"}
 Round: ${input.round}
 User answer: ${input.userText}
-Return JSON with aiText, hintZh, coachState, correctionPreview, nextRoundGoal, provider.`,
-      text: {
-        format: {
-          type: "json_schema",
-          name: "dialogue_turn",
-          schema: {
-            type: "object",
-            additionalProperties: false,
-            required: [
-              "aiText",
-              "hintZh",
-              "coachState",
-              "correctionPreview",
-              "nextRoundGoal",
-              "provider"
-            ],
-            properties: {
-              aiText: { type: "string" },
-              hintZh: { type: "string" },
-              coachState: { type: "string", enum: ["asking"] },
-              correctionPreview: { type: "string" },
-              nextRoundGoal: { type: "string" },
-              provider: { type: "string" }
-            }
-          }
-        }
-      }
-    });
+Return a concise next question in English and a coaching hint in Chinese.`
+    );
 
-    return dialogueTurnResultSchema.parse(JSON.parse(response.output_text));
+    return dialogueTurnResultSchema.parse({
+      ...(json as Record<string, unknown>),
+      coachState: "asking",
+      provider: config.llmProvider
+    });
   } catch {
     return mockDialogueTurn(input.userText, input.round);
   }
@@ -160,10 +216,14 @@ export async function synthesizeWithCartesia(
   text: string,
   config: LiveConfig
 ): Promise<SpeechAudioResult> {
+  if (config.ttsProvider !== "cartesia") {
+    return mockSpeech(text);
+  }
+
   if (
     config.apiMode !== "live" ||
-    !config.cartesiaApiKey ||
-    !config.cartesiaVoiceId ||
+    !config.ttsApiKey ||
+    !config.ttsVoiceId ||
     !text.trim()
   ) {
     return mockSpeech(text);
@@ -173,14 +233,14 @@ export async function synthesizeWithCartesia(
     const response = await fetch("https://api.cartesia.ai/tts/bytes", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${config.cartesiaApiKey}`,
-        "Cartesia-Version": config.cartesiaVersion,
+        Authorization: `Bearer ${config.ttsApiKey}`,
+        "Cartesia-Version": config.ttsVersion,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model_id: config.cartesiaModel,
+        model_id: config.ttsModel,
         transcript: text,
-        voice: { id: config.cartesiaVoiceId },
+        voice: { id: config.ttsVoiceId },
         output_format: { container: "mp3" },
         language: "en"
       })
@@ -203,31 +263,31 @@ export async function synthesizeWithCartesia(
   }
 }
 
-export async function generateReportWithOpenAI(
+export async function generateReportWithLlm(
   _payload: unknown,
   config: LiveConfig
 ): Promise<ReportResult> {
-  if (config.apiMode !== "live" || !config.openaiApiKey) {
+  if (config.apiMode !== "live" || !config.llmApiKey) {
     return mockReport();
   }
 
   try {
-    const client = new OpenAI({ apiKey: config.openaiApiKey });
-    const response = await client.responses.create({
-      model: config.openaiModel,
-      instructions:
-        "Generate a Chinese-first English speaking practice report. Return JSON only.",
-      input: JSON.stringify(_payload),
-      text: {
-        format: {
-          type: "json_schema",
-          name: "practice_report",
-          schema: reportJsonSchema
-        }
-      }
-    });
+    const json = await createJsonChatCompletion(
+      config,
+      [
+        "Generate a Chinese-first English speaking practice report.",
+        "Return one strict JSON object only. Do not include Markdown.",
+        "The JSON keys must be reportId, totalScore, dimensions, summaryZh, corrections, suggestions, coachCommentZh, provider.",
+        "dimensions must include pronunciation, fluency, grammar, expression, taskCompletion.",
+        `provider must be ${config.llmProvider}.`
+      ].join(" "),
+      JSON.stringify(_payload)
+    );
 
-    return reportResultSchema.parse(JSON.parse(response.output_text));
+    return reportResultSchema.parse({
+      ...(json as Record<string, unknown>),
+      provider: config.llmProvider
+    });
   } catch {
     return mockReport();
   }

@@ -3,6 +3,64 @@ import { describe, expect, it } from "vitest";
 import { createApp } from "../server/app";
 
 describe("runtime API settings", () => {
+  it("defaults to the China-first preset while staying in mock mode", async () => {
+    const app = createApp({ apiMode: "mock" });
+
+    const settings = await request(app).get("/api/settings").expect(200);
+
+    expect(settings.body.mode).toBe("mock");
+    expect(settings.body.editable.providerPreset).toBe("china-qwen");
+    expect(settings.body.providers.asr.provider).toBe("mock");
+    expect(settings.body.providers.llm.provider).toBe("qwen");
+    expect(settings.body.providers.tts.provider).toBe("mock");
+  });
+
+  it("applies the China Qwen preset without exposing submitted secrets", async () => {
+    const app = createApp({ apiMode: "mock" });
+
+    const update = await request(app)
+      .post("/api/settings")
+      .send({
+        apiMode: "live",
+        providerPreset: "china-qwen",
+        llmApiKey: "dashscope_test_secret"
+      })
+      .expect(200);
+
+    expect(update.body.mode).toBe("live");
+    expect(update.body.editable.providerPreset).toBe("china-qwen");
+    expect(update.body.providers.llm.provider).toBe("qwen");
+    expect(update.body.providers.llm.configured).toBe(true);
+    expect(update.body.providers.llm.active).toBe(true);
+    expect(update.body.providers.llm.model).toBe("qwen-plus");
+    expect(update.body.providers.llm.baseUrl).toBe("https://dashscope.aliyuncs.com/compatible-mode/v1");
+    expect(update.body.providers.asr.provider).toBe("mock");
+    expect(update.body.providers.tts.provider).toBe("mock");
+    expect(update.text).not.toContain("dashscope_test_secret");
+  });
+
+  it("supports custom OpenAI-compatible LLM provider settings", async () => {
+    const app = createApp({ apiMode: "mock" });
+
+    const update = await request(app)
+      .post("/api/settings")
+      .send({
+        apiMode: "live",
+        providerPreset: "custom",
+        llmProvider: "kimi",
+        llmApiKey: "moonshot_test_secret",
+        llmBaseUrl: "https://api.moonshot.cn/v1",
+        llmModel: "kimi-latest"
+      })
+      .expect(200);
+
+    expect(update.body.providers.llm.provider).toBe("kimi");
+    expect(update.body.providers.llm.model).toBe("kimi-latest");
+    expect(update.body.providers.llm.baseUrl).toBe("https://api.moonshot.cn/v1");
+    expect(update.body.providers.llm.configured).toBe(true);
+    expect(update.text).not.toContain("moonshot_test_secret");
+  });
+
   it("updates provider configuration without exposing submitted secret values", async () => {
     const app = createApp({ apiMode: "mock" });
 

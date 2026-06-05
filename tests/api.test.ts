@@ -12,9 +12,10 @@ describe("local API in mock mode", () => {
     expect(response.body.mode).toBe("mock");
     expect(response.text).not.toContain("sk-");
     expect(response.text).not.toContain("DEEPGRAM_API_KEY=");
-    expect(response.body.providers.openai.configured).toBe(false);
-    expect(response.body.providers.deepgram.configured).toBe(false);
-    expect(response.body.providers.cartesia.configured).toBe(false);
+    expect(response.body.providers.llm.active).toBe(false);
+    expect(response.body.providers.openai.active).toBe(false);
+    expect(response.body.providers.deepgram.active).toBe(false);
+    expect(response.body.providers.cartesia.active).toBe(false);
   });
 
   it("starts a practice session with a structured first question", async () => {
