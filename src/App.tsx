@@ -104,6 +104,7 @@ export default function App() {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [latestAiText, setLatestAiText] = useState("");
   const [latestHint, setLatestHint] = useState("");
+  const [positiveFeedback, setPositiveFeedback] = useState("");
   const [speech, setSpeech] = useState<SpeechAudioResult | null>(null);
   const [speechNotice, setSpeechNotice] = useState("");
   const [speechAudioSrc, setSpeechAudioSrc] = useState("");
@@ -177,6 +178,7 @@ export default function App() {
     setSpeechNotice("");
     setSpeechAudioSrc("");
     setSpeech(null);
+    setPositiveFeedback("");
     setCoachState("thinking");
 
     try {
@@ -282,6 +284,7 @@ export default function App() {
     ]);
     setLatestAiText(turnResult.aiText);
     setLatestHint(turnResult.hintZh);
+    setPositiveFeedback(turnResult.positiveFeedback);
     setSpeech(speechResult);
     playSpeech(speechResult, turnResult.aiText);
     setDraft("");
@@ -580,31 +583,35 @@ export default function App() {
       )}
 
       {screen === "practice" && (
-        <section className="practice-layout">
-          <aside className="panel coach-panel">
-            <CoachAvatar state={coachState} />
-            <p>{coachLine}</p>
-          </aside>
-
-          <section className="panel dialogue-panel">
-            <div className="dialogue-header">
-              <div>
-                <p className="eyebrow">Round {currentRound} / {roundLimit}</p>
-                <h2>{task.titleZh}</h2>
-              </div>
-              <button className="ghost" onClick={replaySpeech}>
-                <Volume2 size={17} />
-                重播 AI
-              </button>
+        <section className="practice-grid">
+          <div className="stage">
+            <div className="stage-q">{latestAiText}</div>
+            <div className="stage-mascot">
+              <CoachAvatar state={coachState} size={150} />
             </div>
+            {draft && <div className="stage-subtitle">{draft}</div>}
+            {recording && <div className="stage-ring" />}
+            <button
+              className="stage-speak"
+              onClick={recording ? stopRecording : beginRecording}
+              disabled={Boolean(busy) && !recording}
+            >
+              {recording ? "停止" : coachState === "thinking" ? "思考中" : "开始回答"}
+            </button>
+            <p className="muted stage-note">说完点“停止”，系统会转写并继续追问。</p>
+          </div>
 
-            <div className="bubble ai">
-              <strong>{task.aiRoleZh}</strong>
-              <p>{latestAiText}</p>
+          <aside className="practice-side">
+            <div className="goal-now">
+              <span className="eyebrow">本轮目标</span>
+              <p>{task.focus}</p>
             </div>
+            {positiveFeedback && <div className="round-tip">👏 {positiveFeedback}</div>}
+            {(busy || latestHint) && <div className="round-tip">💡 {busy || latestHint}</div>}
+            {speechNotice && <div className="round-tip">{speechNotice}</div>}
 
-            <label className="transcript-box">
-              <span>你的回答转写</span>
+            <label className="transcript-box compact-transcript">
+              <span>字幕 / 可编辑回答</span>
               <textarea
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
@@ -612,31 +619,18 @@ export default function App() {
               />
             </label>
 
-            <div className="control-row">
-              {!recording ? (
-                <button className="secondary" onClick={beginRecording}>
-                  <Mic size={18} />
-                  开始录音
-                </button>
-              ) : (
-                <button className="danger" onClick={stopRecording}>
-                  <Square size={18} />
-                  停止并识别
-                </button>
-              )}
-              <button className="secondary" onClick={() => runTranscription()}>
+            <div className="control-row side-actions">
+              <button className="secondary" onClick={() => runTranscription()} disabled={Boolean(busy)}>
                 <RefreshCw size={18} />
                 使用模拟转写
               </button>
               <button className="primary" onClick={submitTurn} disabled={!draft.trim() || Boolean(busy)}>
                 <Send size={18} />
-                提交本轮
+                提交这一轮
               </button>
             </div>
 
-            <div className="hint-line">{busy || latestHint}</div>
-            {speechNotice && <div className="hint-line">{speechNotice}</div>}
-            {speech && <div className="hint-line">TTS 状态：{speech.provider} / {speech.format}</div>}
+            <div className="tech-fold">🟢 语音链路正常 {speech ? `· ${speech.provider}` : ""}</div>
             {speechAudioSrc && (
               <audio
                 className="tts-player"
@@ -645,26 +639,10 @@ export default function App() {
                 aria-label="AI 教练真人语音播放器"
               />
             )}
-          </section>
-
-          <aside className="panel progress-panel">
-            <h3>学习路径</h3>
-            <p>{task.focus}</p>
-            <FlowTracker steps={journeySteps} />
-            <div className="latency-card">
-              <span>端到端链路</span>
-              <strong>ASR -&gt; LLM -&gt; TTS</strong>
-              <small>{speech ? `最近 TTS ${speech.durationEstimateSec.toFixed(1)}s / ${speech.provider}` : "提交后展示播报状态"}</small>
-            </div>
-            <div className="round-list">
-              {turns.map((turn) => (
-                <div key={turn.round}>
-                  <span>Round {turn.round}</span>
-                  <p>{turn.userText}</p>
-                  {turn.correctionPreview && <small>{turn.correctionPreview}</small>}
-                </div>
-              ))}
-            </div>
+            <button className="ghost wide" onClick={replaySpeech}>
+              <Volume2 size={17} />
+              重播 AI
+            </button>
             <button className="primary wide" onClick={finishSession} disabled={turns.length === 0 || Boolean(busy)}>
               <BadgeCheck size={18} />
               结束并生成报告
