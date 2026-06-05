@@ -46,54 +46,51 @@ export function BrandTopBar() {
 }
 
 export function GuideCardGrid({
-  onStartPractice,
-  onOpenSettings
+  onStartPractice
 }: {
   onStartPractice: () => void;
-  onOpenSettings: () => void;
 }) {
   const cards: GuideCardConfig[] = [
     {
       id: "practice",
-      title: "practice",
-      description: "选择面试、点餐、会议等场景，用 5 分钟完成一轮真实口语任务。",
-      cta: "START DRILL",
+      title: "scenes",
+      description: "支持面试、点餐、会议和自定义场景，先定目标再进入真实对话。",
+      cta: "PICK SCENE",
       color: "var(--feather-green)",
       variant: "practice",
       onClick: onStartPractice
     },
     {
       id: "speech",
-      title: "speech",
-      description: "录音、转写、追问和 TTS 播报串成稳定链路，比赛演示默认 mock 可跑通。",
-      cta: "VIEW FLOW",
+      title: "voice",
+      description: "ASR -> LLM -> TTS 串成端到端语音链路，保留延迟和 fallback 状态。",
+      cta: "VOICE FLOW",
       color: "var(--macaw)",
       variant: "speech"
     },
     {
       id: "coach",
       title: "coach",
-      description: "虚拟教练会在倾听、思考、追问、评价和庆祝之间切换，陪你完成训练。",
+      description: "虚拟教练按倾听、思考、追问、评价切状态，让多轮对话更自然。",
       cta: "MEET COACH",
       color: "var(--purple)",
       variant: "coach"
     },
     {
-      id: "streak",
-      title: "streak",
-      description: "每天进入课后报告才点亮一次，不惩罚断签，强调持续开口。",
-      cta: "CHECK IN",
+      id: "feedback",
+      title: "feedback",
+      description: "用转写置信度、低置信词和 rubric 聚合发音评测、语法和表达纠错。",
+      cta: "CHECK GROWTH",
       color: "var(--bee)",
       variant: "streak"
     },
     {
-      id: "settings",
-      title: "api lab",
-      description: "前端保留 API 配置入口，密钥只发送到本地后端运行时内存。",
-      cta: "CONFIGURE",
+      id: "report",
+      title: "summary",
+      description: "课后报告沉淀五维评分、逐句纠错、推荐表达和下一轮学习目标。",
+      cta: "VIEW REPORT",
       color: "var(--coral)",
-      variant: "report",
-      onClick: onOpenSettings
+      variant: "report"
     }
   ];
 

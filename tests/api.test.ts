@@ -28,6 +28,36 @@ describe("local API in mock mode", () => {
     expect(response.body.coachState).toBe("asking");
   });
 
+  it("starts a practice session from a custom scenario", async () => {
+    const response = await request(app)
+      .post("/api/session/start")
+      .send({
+        scenarioId: "custom-demo",
+        taskId: "custom-task",
+        customScenario: {
+          id: "custom-demo",
+          nameZh: "校园项目答辩",
+          nameEn: "Custom",
+          descriptionZh: "自定义答辩场景",
+          tasks: [
+            {
+              id: "custom-task",
+              titleZh: "解释项目价值",
+              titleEn: "Custom practice",
+              aiRoleZh: "AI 答辩老师",
+              focus: "先说结论，再补数字",
+              openingQuestion: "Could you explain the value of your project in one minute?"
+            }
+          ]
+        }
+      })
+      .expect(200);
+
+    expect(response.body.scenario.nameZh).toBe("校园项目答辩");
+    expect(response.body.task.focus).toContain("数字");
+    expect(response.body.aiText).toContain("explain the value");
+  });
+
   it("transcribes uploaded audio into the shared transcript shape", async () => {
     const response = await request(app)
       .post("/api/asr/transcribe")

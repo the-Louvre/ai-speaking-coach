@@ -96,6 +96,10 @@ export async function generateTurnWithOpenAI(
   input: {
     scenarioId: string;
     taskId: string;
+    scenarioLabel?: string;
+    taskTitle?: string;
+    taskFocus?: string;
+    aiRoleZh?: string;
     round: number;
     userText: string;
   },
@@ -111,8 +115,10 @@ export async function generateTurnWithOpenAI(
       model: config.openaiModel,
       instructions:
         "You are an English speaking coach for Chinese learners. Return concise JSON only.",
-      input: `Scenario: ${input.scenarioId}
-Task: ${input.taskId}
+      input: `Scenario: ${input.scenarioLabel || input.scenarioId}
+Task: ${input.taskTitle || input.taskId}
+AI role: ${input.aiRoleZh || "AI speaking coach"}
+Learning focus: ${input.taskFocus || "help the learner answer clearly and naturally"}
 Round: ${input.round}
 User answer: ${input.userText}
 Return JSON with aiText, hintZh, coachState, correctionPreview, nextRoundGoal, provider.`,

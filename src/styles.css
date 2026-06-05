@@ -324,6 +324,147 @@ h3 {
   background: var(--panel-bg);
 }
 
+.learning-journey-card {
+  background: var(--panel-bg);
+}
+
+.journey-header,
+.custom-scenario-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.journey-header svg,
+.custom-scenario-header svg {
+  color: var(--feather-green);
+}
+
+.journey-metrics,
+.history-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.metric {
+  min-width: 0;
+  border-radius: 18px;
+  padding: 12px;
+  background: var(--snow);
+  border: 2px solid var(--swan);
+}
+
+.metric svg {
+  color: var(--feather-green);
+}
+
+.metric strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--eel);
+  font-size: 1.28rem;
+  font-weight: 950;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.metric span {
+  display: block;
+  margin-top: 4px;
+  color: var(--wolf);
+  font-size: 0.8rem;
+  font-weight: 900;
+}
+
+.active-goal,
+.journey-note,
+.latency-card {
+  border-radius: 20px;
+  padding: 16px;
+  background: var(--snow);
+  border: 2px solid var(--swan);
+}
+
+.active-goal span,
+.journey-note span,
+.latency-card span {
+  display: block;
+  color: var(--wing-overlay);
+  font-size: 0.78rem;
+  font-weight: 950;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.active-goal strong,
+.journey-note strong,
+.latency-card strong {
+  display: block;
+  margin: 6px 0;
+  color: var(--eel);
+  font-weight: 950;
+  line-height: 1.35;
+}
+
+.active-goal small,
+.latency-card small {
+  color: var(--wolf);
+  line-height: 1.5;
+}
+
+.flow-tracker {
+  display: grid;
+  gap: 12px;
+  margin: 18px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.flow-tracker.compact {
+  margin: 0;
+}
+
+.flow-tracker li {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  color: var(--wolf);
+}
+
+.flow-dot {
+  width: 14px;
+  height: 14px;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: var(--swan);
+  box-shadow: 0 0 0 4px rgba(229, 229, 229, 0.55);
+}
+
+.flow-tracker li.done .flow-dot {
+  background: var(--feather-green);
+  box-shadow: 0 0 0 4px rgba(137, 226, 25, 0.24);
+}
+
+.flow-tracker li.active .flow-dot {
+  background: var(--bee);
+  box-shadow: 0 0 0 4px rgba(255, 200, 0, 0.24);
+}
+
+.flow-tracker strong {
+  display: block;
+  color: var(--eel);
+  font-weight: 950;
+}
+
+.flow-tracker small {
+  display: block;
+  margin-top: 3px;
+  line-height: 1.45;
+}
+
 .stat {
   display: grid;
   grid-template-columns: 32px minmax(0, 1fr);
@@ -523,6 +664,67 @@ h3 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
   margin: 24px 0;
+}
+
+.requirement-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.requirement-strip span {
+  border-radius: 999px;
+  padding: 8px 12px;
+  color: var(--wing-overlay);
+  background: rgba(137, 226, 25, 0.16);
+  border: 2px solid rgba(88, 204, 2, 0.22);
+  font-size: 0.86rem;
+  font-weight: 950;
+}
+
+.custom-scenario-box {
+  display: grid;
+  gap: 16px;
+  margin: 12px 0 24px;
+  border-radius: 24px;
+  padding: 20px;
+  background: var(--snow);
+  border: 2px solid var(--swan);
+}
+
+.custom-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.custom-form-grid label {
+  display: grid;
+  gap: 8px;
+  color: var(--eel);
+  font-weight: 950;
+}
+
+.custom-form-grid input {
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  border: 2px solid var(--swan);
+  border-radius: 18px;
+  padding: 0 14px;
+  color: var(--eel);
+  background: var(--panel-bg);
+  outline: none;
+}
+
+.custom-form-grid input:focus {
+  border-color: var(--feather-green);
+  box-shadow: 0 0 0 4px rgba(88, 204, 2, 0.16);
+}
+
+.custom-question {
+  grid-column: 1 / -1;
 }
 
 .practice-layout {
@@ -793,6 +995,54 @@ textarea:focus,
   background: rgba(137, 226, 25, 0.16);
   border: 2px solid rgba(88, 204, 2, 0.24);
   font-weight: 950;
+}
+
+.learning-history-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.learning-history-panel .history-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.learning-history-panel .metric strong {
+  font-size: 1rem;
+}
+
+.history-list {
+  display: grid;
+  gap: 12px;
+}
+
+.history-list article {
+  border-radius: 18px;
+  padding: 14px;
+  background: var(--panel-bg);
+  border: 2px solid var(--swan);
+}
+
+.history-list strong,
+.history-list span,
+.history-list small {
+  display: block;
+}
+
+.history-list strong {
+  color: var(--eel);
+  font-weight: 950;
+}
+
+.history-list span {
+  margin-top: 6px;
+  color: var(--feather-green);
+  font-weight: 950;
+}
+
+.history-list small {
+  margin-top: 6px;
+  color: var(--wolf);
+  line-height: 1.55;
 }
 
 .score-grid {
@@ -1364,9 +1614,20 @@ textarea:focus,
   .guide-card-grid,
   .scenario-list,
   .task-list,
+  .custom-form-grid,
   .score-grid,
   .settings-grid {
     grid-template-columns: 1fr;
+  }
+
+  .journey-metrics,
+  .history-metrics,
+  .learning-history-panel .history-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .custom-question {
+    grid-column: auto;
   }
 
   .guide-card {

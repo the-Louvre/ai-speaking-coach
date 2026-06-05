@@ -68,10 +68,10 @@ export const api = {
       body: JSON.stringify(payload)
     }),
   scenarios: () => requestJson<{ scenarios: Scenario[] }>("/api/scenarios"),
-  startSession: (scenarioId: string, taskId: string) =>
+  startSession: (scenarioId: string, taskId: string, customScenario?: Scenario) =>
     requestJson<SessionStart>("/api/session/start", {
       method: "POST",
-      body: JSON.stringify({ scenarioId, taskId })
+      body: JSON.stringify({ scenarioId, taskId, customScenario })
     }),
   transcribe: (audio?: Blob) => {
     const form = new FormData();
@@ -84,6 +84,10 @@ export const api = {
     sessionId: string;
     scenarioId: string;
     taskId: string;
+    scenarioLabel?: string;
+    taskTitle?: string;
+    taskFocus?: string;
+    aiRoleZh?: string;
     round: number;
     userText: string;
   }) =>
