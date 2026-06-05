@@ -6,6 +6,7 @@ import type {
   TranscriptResult
 } from "../../shared/schemas";
 import { dialogueTurnResultSchema, reportResultSchema } from "../../shared/schemas";
+import { reportJsonSchema } from "./reportSchema";
 import { mockDialogueTurn, mockReport, mockSpeech, mockTranscribe } from "./mockProviders";
 
 export type LiveConfig = {
@@ -215,10 +216,7 @@ export async function generateReportWithOpenAI(
         format: {
           type: "json_schema",
           name: "practice_report",
-          schema: {
-            type: "object",
-            additionalProperties: true
-          }
+          schema: reportJsonSchema
         }
       }
     });

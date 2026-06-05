@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyPracticeCompletion } from "../src/domain/checkin";
+import { applyPracticeCompletion, getRecentWeekDates } from "../src/domain/checkin";
 
 describe("check-in streak rules", () => {
   it("starts a first-day streak when the user completes a report", () => {
@@ -51,5 +51,17 @@ describe("check-in streak rules", () => {
 
     expect(afterGap.currentStreak).toBe(1);
     expect(afterGap.restartMessage).toContain("重新开始也算进步");
+  });
+
+  it("builds full week dates across a year boundary", () => {
+    expect(getRecentWeekDates("2026-01-02")).toEqual([
+      "2025-12-27",
+      "2025-12-28",
+      "2025-12-29",
+      "2025-12-30",
+      "2025-12-31",
+      "2026-01-01",
+      "2026-01-02"
+    ]);
   });
 });

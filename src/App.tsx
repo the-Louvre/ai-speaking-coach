@@ -12,14 +12,15 @@ import {
   Volume2
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { DialogueTurnResult, ReportResult, SpeechAudioResult } from "../shared/schemas";
+import type { CoachState, DialogueTurnResult, ReportResult, SpeechAudioResult } from "../shared/schemas";
 import type { Scenario } from "../server/data";
 import { api, type HealthResult, type SessionStart } from "./api";
-import { getShanghaiDate, getRecentWeekCompletion, type CheckinState } from "./domain/checkin";
+import { CoachAvatar } from "./components/CoachAvatar";
+import { WeekDots } from "./components/WeekDots";
+import { getShanghaiDate, type CheckinState } from "./domain/checkin";
 import { completeToday, loadCheckin } from "./storage";
 
 type Screen = "home" | "prep" | "practice" | "report";
-type CoachState = "idle" | "listening" | "thinking" | "asking" | "reviewing" | "celebrating";
 type Turn = {
   round: number;
   aiText: string;
@@ -47,53 +48,6 @@ const fallbackScenarios: Scenario[] = [
     ]
   }
 ];
-
-function CoachAvatar({ state }: { state: CoachState }) {
-  return (
-    <div className={`coach-stage coach-${state}`} aria-label={`虚拟教练状态：${state}`}>
-      <div className="coach-aura" />
-      <div className="coach-figure">
-        <div className="coach-hair" />
-        <div className="coach-face">
-          <span className="eye left" />
-          <span className="eye right" />
-          <span className="mouth" />
-        </div>
-        <div className="coach-jacket" />
-      </div>
-      <div className="coach-status">
-        {state === "listening" && "正在听你说"}
-        {state === "thinking" && "分析回答中"}
-        {state === "asking" && "准备追问"}
-        {state === "reviewing" && "生成课后点评"}
-        {state === "celebrating" && "今日已打卡"}
-        {state === "idle" && "待机陪练中"}
-      </div>
-    </div>
-  );
-}
-
-function WeekDots({ checkin }: { checkin: CheckinState }) {
-  const today = getShanghaiDate();
-  const completed = new Set(getRecentWeekCompletion(checkin.completedDates, today));
-  const days = Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(Date.parse(`${today}T00:00:00+08:00`) - (6 - index) * 24 * 60 * 60 * 1000);
-    return new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Asia/Shanghai",
-      month: "2-digit",
-      day: "2-digit"
-    }).format(date);
-  });
-
-  return (
-    <div className="week-dots">
-      {days.map((day) => {
-        const full = `${new Date().getFullYear()}-${day}`;
-        return <span key={day} className={completed.has(full) ? "active" : ""} title={day} />;
-      })}
-    </div>
-  );
-}
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("home");
@@ -228,6 +182,7 @@ export default function App() {
     setDraft("");
     setCoachState(turnResult.coachState);
     setBusy("");
+    window.scrollTo({ top: 0, behavior: "instant" });
   }
 
   async function finishSession() {

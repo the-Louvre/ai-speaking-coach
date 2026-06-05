@@ -31,6 +31,15 @@ export function getShanghaiDate(now = new Date()): string {
   }).format(now);
 }
 
+function formatShanghaiDate(date: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(date);
+}
+
 export function createEmptyCheckinState(): CheckinState {
   return {
     completedDates: [],
@@ -74,14 +83,13 @@ export function applyPracticeCompletion(
 }
 
 export function getRecentWeekCompletion(completedDates: string[], today: string): string[] {
+  return getRecentWeekDates(today).filter((date) => completedDates.includes(date));
+}
+
+export function getRecentWeekDates(today: string): string[] {
   const todayMs = parseLocalDate(today);
   return Array.from({ length: 7 }, (_, index) => {
     const date = new Date(todayMs - (6 - index) * DAY_MS);
-    return new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Asia/Shanghai",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit"
-    }).format(date);
-  }).filter((date) => completedDates.includes(date));
+    return formatShanghaiDate(date);
+  });
 }
