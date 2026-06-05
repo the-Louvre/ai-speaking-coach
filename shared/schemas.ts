@@ -32,6 +32,7 @@ export const dialogueTurnResultSchema = z.object({
   aiText: z.string(),
   hintZh: z.string(),
   coachState: coachStateSchema,
+  positiveFeedback: z.string(),
   correctionPreview: z.string(),
   nextRoundGoal: z.string(),
   provider: z.string(),
