@@ -417,27 +417,45 @@ export default function App() {
   return (
     <>
       <BrandTopBar />
-      <main className="app-shell">
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">AI Speaking Coach · lingo coach</p>
-          <h1>
-            <span>像每日闯关</span>
-            <span>一样练英语口语</span>
-          </h1>
-        </div>
-        <div className="top-actions">
-          <div className="api-pill">
-            <Headphones size={16} />
-            {health?.mode === "live" ? "Live API" : "Mock Demo"}
+      <nav className="screen-tabs" aria-label="主要页面">
+        <div className="screen-tabs-inner">
+          <div className="screen-tab-list">
+            <button
+              className={`screen-tab ${screen === "home" ? "active" : ""}`}
+              type="button"
+              onClick={() => setScreen("home")}
+            >
+              ① 首页
+            </button>
+            <button
+              className={`screen-tab ${screen === "practice" || screen === "prep" ? "active" : ""}`}
+              type="button"
+              onClick={() => setScreen(session ? "practice" : "prep")}
+            >
+              ② 练习页
+            </button>
+            <button
+              className={`screen-tab ${screen === "report" ? "active" : ""}`}
+              type="button"
+              disabled={!report}
+              onClick={() => report && setScreen("report")}
+            >
+              ③ 报告页
+            </button>
           </div>
-          <button className="secondary" onClick={() => setSettingsOpen(true)}>
-            <Settings size={16} />
-            API 配置
-          </button>
+          <div className="screen-tab-actions">
+            <div className="api-pill">
+              <Headphones size={16} />
+              {health?.mode === "live" ? "Live API" : "Mock Demo"}
+            </div>
+            <button className="secondary" onClick={() => setSettingsOpen(true)}>
+              <Settings size={16} />
+              API 配置
+            </button>
+          </div>
         </div>
-      </header>
-
+      </nav>
+      <main className="app-shell">
       <ApiSettingsPanel
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
@@ -445,13 +463,16 @@ export default function App() {
       />
 
       {screen === "home" && (
-        <section className="home-grid">
+        <section className="home-screen">
           <div className="home-hero">
             <section className="panel home-task">
               <span className="eyebrow">今日任务</span>
-              <h2>{HOME_COPY.title}</h2>
+              <h2 className="home-task-title">
+                <span>今天只练 5 分钟，</span>
+                <span>把一个回答说清楚。</span>
+              </h2>
               <p className="muted">{HOME_COPY.subtitle}</p>
-              <div className="goal-box">本轮目标：{task.focus}</div>
+              <div className="goal-box">🎯 本轮目标：{task.focus}</div>
               <div className="top-actions">
                 <button className="primary" onClick={startPractice}>
                   <Play size={18} />
@@ -470,7 +491,7 @@ export default function App() {
             </section>
 
             <section className="panel home-coach">
-              <div className="home-bubble">Ready for a 5-minute practice?</div>
+              <div className="home-bubble">Ready for a 5-minute interview practice? 😊</div>
               <CoachAvatar state={coachState === "idle" ? "idle" : coachState} size={240} />
             </section>
 
@@ -478,7 +499,7 @@ export default function App() {
               <span className="eyebrow">我的成长轨迹</span>
               <div className="growth-row">
                 <span className="muted">连续练习</span>
-                <span className="growth-big">{GROWTH_MOCK.streakDays} 天</span>
+                <span className="growth-big">{GROWTH_MOCK.streakDays} 天 🔥</span>
               </div>
               <div className="growth-row">
                 <span className="muted">累计口语时间</span>
@@ -493,7 +514,7 @@ export default function App() {
                 <span className="pill">{GROWTH_MOCK.weakAreaZh}</span>
               </div>
               <div className="next-target">
-                推荐下一练：{GROWTH_MOCK.nextPracticeZh}
+                📌 推荐下一练：{GROWTH_MOCK.nextPracticeZh}
                 <br />
                 {GROWTH_MOCK.nextTipZh}
               </div>
@@ -525,8 +546,18 @@ export default function App() {
                   setScreen("prep");
                 }}
               >
-                <h3>{item.nameZh}</h3>
-                <div className="scene-meta">{item.tasks[0]?.focus}</div>
+                <div className="scene-tags">
+                  <span>{index === 0 ? "推荐" : index === 1 ? "低压力入门" : "进阶"}</span>
+                  <span>{item.tasks[0]?.titleZh}</span>
+                </div>
+                <h3>{item.nameZh} {item.nameEn}</h3>
+                <div className="scene-meta">
+                  训练目标：{item.tasks[0]?.focus}
+                  <br />
+                  核心能力：结构表达 · 真实追问 · 课后复盘
+                  <br />
+                  适合：5 分钟练习 · 中文用户英文开口
+                </div>
                 <div className="scene-go">开始练习</div>
               </button>
             ))}
@@ -583,6 +614,12 @@ export default function App() {
       )}
 
       {screen === "practice" && (
+        <>
+        <div className="practice-top">
+          <span className="practice-chip green">{scenario.nameZh} · {scenario.nameEn}</span>
+          <span className="practice-chip">第 {Math.min(currentRound, roundLimit)} / {roundLimit} 轮</span>
+          <span className="practice-chip goal">🎯 {task.focus}</span>
+        </div>
         <section className="practice-grid">
           <div className="stage">
             <div className="stage-q">{latestAiText}</div>
@@ -649,6 +686,7 @@ export default function App() {
             </button>
           </aside>
         </section>
+        </>
       )}
 
       {screen === "report" && report && (

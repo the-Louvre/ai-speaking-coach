@@ -39,6 +39,38 @@
   gap: 22px;
 }
 
+.practice-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.practice-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 2px solid var(--swan);
+  border-radius: 999px;
+  padding: 6px 14px;
+  background: var(--snow);
+  font-weight: 800;
+  font-size: 0.82rem;
+  color: var(--eel);
+}
+
+.practice-chip.green {
+  border-color: var(--mask-green);
+  background: #eafbe0;
+  color: var(--wing-overlay);
+}
+
+.practice-chip.goal {
+  border-color: var(--bee);
+  background: #fff7d6;
+  color: #a98400;
+}
+
 .stage {
   position: relative;
   display: flex;
@@ -201,6 +233,10 @@
 }
 
 /* Home low-pressure layout */
+.home-screen {
+  display: block;
+}
+
 .home-hero {
   display: grid;
   grid-template-columns: 1.05fr 1.1fr 0.95fr;
@@ -2332,5 +2368,365 @@ textarea:focus,
 
   .score-num {
     font-size: 64px;
+  }
+}
+
+/* UX mockup layout override */
+.brand-top-bar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  min-height: 48px;
+}
+
+.screen-tabs {
+  position: sticky;
+  top: 48px;
+  z-index: 45;
+  border-bottom: 2px solid var(--swan);
+  background: var(--snow);
+}
+
+.screen-tabs-inner {
+  display: flex;
+  width: min(1440px, 100%);
+  min-height: 64px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 auto;
+  padding: 10px 40px;
+}
+
+.screen-tab-list,
+.screen-tab-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.screen-tab {
+  min-height: 40px;
+  border: 2px solid var(--swan);
+  border-radius: 14px;
+  padding: 0 18px;
+  background: var(--panel-bg);
+  color: var(--wolf);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.screen-tab.active {
+  border-color: var(--wing-overlay);
+  background: var(--feather-green);
+  color: var(--snow);
+}
+
+.screen-tab:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.app-shell {
+  width: min(1440px, 100%);
+  padding: 48px 40px 96px;
+}
+
+.home-screen {
+  display: block;
+}
+
+.home-hero {
+  grid-template-columns: minmax(0, 1.05fr) minmax(300px, 1.1fr) minmax(300px, 0.95fr);
+  gap: 24px;
+  align-items: stretch;
+}
+
+.home-task,
+.home-coach,
+.home-growth {
+  min-height: 430px;
+  border-radius: 22px;
+  padding: 24px;
+}
+
+.home-task {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.home-task h2 {
+  margin: 10px 0 8px;
+  max-width: 560px;
+  font-size: clamp(30px, 2.9vw, 42px);
+  line-height: 1.05;
+  letter-spacing: 0;
+}
+
+.home-task-title span {
+  display: block;
+  white-space: nowrap;
+}
+
+.home-task .muted {
+  max-width: 560px;
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.home-task .top-actions {
+  justify-content: flex-start;
+  margin-top: 8px;
+}
+
+.goal-box {
+  width: 100%;
+  margin: 16px 0;
+  border-radius: 16px;
+  font-weight: 800;
+}
+
+.home-bubble {
+  position: relative;
+  max-width: 320px;
+  margin-bottom: 18px;
+}
+
+.home-bubble::after {
+  position: absolute;
+  bottom: -15px;
+  left: 50%;
+  width: 16px;
+  height: 16px;
+  border-right: 2px solid var(--swan);
+  border-bottom: 2px solid var(--swan);
+  background: var(--snow);
+  content: "";
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.home-coach {
+  background: linear-gradient(180deg, #f3fde9, #ffffff);
+}
+
+.home-coach .coach-stage {
+  width: min(100%, 280px);
+}
+
+.home-growth .pill {
+  border-color: var(--bee);
+  background: #fff7d6;
+  color: #a98400;
+}
+
+.section-kicker {
+  display: block;
+  margin: 34px 0 0;
+}
+
+.value-row {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 16px;
+}
+
+.value-card {
+  min-height: 156px;
+  border-radius: 18px;
+}
+
+.value-icon {
+  display: flex;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  margin-bottom: 10px;
+  background: #eafbe0;
+}
+
+.scene-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 16px;
+}
+
+.scene-card {
+  min-height: 220px;
+  border-radius: 20px;
+  padding: 22px;
+}
+
+.scene-card h3 {
+  font-size: 26px;
+  letter-spacing: 0;
+}
+
+.scene-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.scene-tags span {
+  border-radius: 999px;
+  padding: 3px 10px;
+  background: rgba(255, 255, 255, 0.25);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.scene-card.custom {
+  min-height: 220px;
+}
+
+.practice-top {
+  margin-bottom: 20px;
+}
+
+.practice-grid {
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 24px;
+}
+
+.stage {
+  min-height: 460px;
+  justify-content: center;
+  border-radius: 24px;
+  padding: 32px;
+  background: linear-gradient(180deg, #f3fde9, #ffffff);
+}
+
+.stage-q {
+  position: static;
+  max-width: 520px;
+  margin-bottom: 24px;
+  transform: none;
+  font-size: 20px;
+}
+
+.stage-mascot,
+.stage-subtitle {
+  position: static;
+  transform: none;
+}
+
+.stage-subtitle {
+  max-width: min(640px, 100%);
+  margin-top: 22px;
+}
+
+.stage-speak {
+  margin-top: 8px;
+}
+
+.stage-note {
+  margin-top: 18px;
+}
+
+.practice-side {
+  gap: 14px;
+}
+
+.report-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.score-hero h2 {
+  max-width: 820px;
+  font-size: clamp(24px, 2.4vw, 34px);
+  line-height: 1.08;
+  letter-spacing: 0;
+}
+
+@media (max-width: 1100px) {
+  .screen-tabs-inner {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .screen-tab-actions {
+    justify-content: space-between;
+  }
+
+  .home-hero,
+  .practice-grid,
+  .report-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .home-task,
+  .home-coach,
+  .home-growth {
+    min-height: auto;
+  }
+
+  .value-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .screen-tabs {
+    top: 48px;
+  }
+
+  .screen-tabs-inner {
+    padding: 10px 20px;
+  }
+
+  .screen-tab-list,
+  .screen-tab-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell {
+    padding: 32px 20px 72px;
+  }
+
+  .home-task h2 {
+    font-size: clamp(30px, 10vw, 42px);
+    line-height: 1.05;
+  }
+
+  .home-task-title span {
+    white-space: normal;
+  }
+
+  .home-task,
+  .home-coach,
+  .home-growth,
+  .value-card,
+  .stage,
+  .report-grid > .panel {
+    padding: 22px;
+  }
+
+  .home-task .top-actions {
+    display: grid;
+    width: 100%;
+    grid-template-columns: 1fr;
+  }
+
+  .value-row,
+  .scene-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .scene-card,
+  .scene-card.custom {
+    min-height: 190px;
+  }
+
+  .stage-q {
+    font-size: 17px;
+  }
+
+  .stage .coach-stage {
+    width: min(100%, 220px);
   }
 }
