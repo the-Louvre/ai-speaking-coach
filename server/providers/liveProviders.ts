@@ -393,7 +393,8 @@ export async function generateTurnWithLlm(
       [
         "You are an English speaking coach for Chinese learners.",
         "Return one strict JSON object only. Do not include Markdown.",
-        "The JSON keys must be aiText, hintZh, coachState, correctionPreview, nextRoundGoal, provider.",
+        "The JSON keys must be aiText, hintZh, coachState, positiveFeedback, correctionPreview, nextRoundGoal, provider.",
+        "positiveFeedback must be one short encouraging Chinese sentence that first affirms what the learner did well, before any correction.",
         "coachState must be asking.",
         `provider must be ${config.llmProvider}.`
       ].join(" "),
@@ -407,6 +408,7 @@ Return a concise next question in English and a coaching hint in Chinese.`
     );
 
     return dialogueTurnResultSchema.parse({
+      positiveFeedback: "你已经完成了基本表达。",
       ...(json as Record<string, unknown>),
       coachState: "asking",
       provider: config.llmProvider
