@@ -32,6 +32,63 @@
   text-rendering: optimizeLegibility;
 }
 
+/* Mascot avatar animation */
+.mascot {
+  display: inline-block;
+}
+
+.mascot-idle {
+  animation: mascot-bob 3.2s ease-in-out infinite;
+}
+
+.mascot-asking {
+  animation: mascot-bob 1.4s ease-in-out infinite;
+}
+
+.mascot-listening {
+  animation: mascot-lean 2s ease-in-out infinite;
+}
+
+.mascot-thinking {
+  animation: mascot-tilt 2.4s ease-in-out infinite;
+}
+
+@keyframes mascot-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes mascot-lean {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-3px) scale(1.03);
+  }
+}
+
+@keyframes mascot-tilt {
+  0%,
+  100% {
+    transform: rotate(-3deg);
+  }
+  50% {
+    transform: rotate(3deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mascot {
+    animation: none !important;
+  }
+}
+
 * {
   box-sizing: border-box;
 }

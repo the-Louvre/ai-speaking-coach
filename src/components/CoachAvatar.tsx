@@ -1,26 +1,20 @@
 import type { CoachState } from "../../shared/schemas";
+import { MascotAvatar } from "./MascotAvatar";
 
-export function CoachAvatar({ state }: { state: CoachState }) {
+const STATUS_ZH: Record<CoachState, string> = {
+  idle: "待机陪练中",
+  listening: "正在听你说",
+  thinking: "分析回答中",
+  asking: "准备追问",
+  reviewing: "生成课后点评",
+  celebrating: "今日已打卡"
+};
+
+export function CoachAvatar({ state, size }: { state: CoachState; size?: number }) {
   return (
     <div className={`coach-stage coach-${state}`} aria-label={`虚拟教练状态：${state}`}>
-      <div className="coach-aura" />
-      <div className="coach-figure">
-        <div className="coach-hair" />
-        <div className="coach-face">
-          <span className="eye left" />
-          <span className="eye right" />
-          <span className="mouth" />
-        </div>
-        <div className="coach-jacket" />
-      </div>
-      <div className="coach-status">
-        {state === "listening" && "正在听你说"}
-        {state === "thinking" && "分析回答中"}
-        {state === "asking" && "准备追问"}
-        {state === "reviewing" && "生成课后点评"}
-        {state === "celebrating" && "今日已打卡"}
-        {state === "idle" && "待机陪练中"}
-      </div>
+      <MascotAvatar state={state} size={size} />
+      <div className="coach-status">{STATUS_ZH[state]}</div>
     </div>
   );
 }
