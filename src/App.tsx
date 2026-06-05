@@ -110,6 +110,7 @@ export default function App() {
   const [learning, setLearning] = useState<LearningState>(() => loadLearning());
   const [customForm, setCustomForm] = useState<CustomScenarioForm>(defaultCustomForm);
   const [busy, setBusy] = useState("");
+  const [startError, setStartError] = useState("");
   const [recording, setRecording] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -170,23 +171,41 @@ export default function App() {
 
   async function startPractice() {
     setBusy("创建练习任务");
+    setStartError("");
+    setSpeechNotice("");
+    setSpeechAudioSrc("");
+    setSpeech(null);
     setCoachState("thinking");
-    const next = await api.startSession(scenario.id, task.id, isCustomScenario(scenario) ? scenario : undefined);
-    setBusy("生成教练语音");
-    const speechResult = await api.synthesize(next.aiText);
-    setSession(next);
-    setScenario(next.scenario);
-    setTask(next.task);
-    setLatestAiText(next.aiText);
-    setLatestHint(next.hintZh);
-    setSpeech(speechResult);
-    setTurns([]);
-    setDraft("");
-    setReport(null);
-    setCoachState("asking");
-    setScreen("practice");
-    setBusy("");
-    playSpeech(speechResult, next.aiText);
+
+    try {
+      const next = await api.startSession(scenario.id, task.id, isCustomScenario(scenario) ? scenario : undefined);
+      setSession(next);
+      setScenario(next.scenario);
+      setTask(next.task);
+      setLatestAiText(next.aiText);
+      setLatestHint(next.hintZh);
+      setTurns([]);
+      setDraft("");
+      setReport(null);
+      setCoachState("asking");
+      setScreen("practice");
+      setBusy("生成教练语音");
+
+      void api
+        .synthesize(next.aiText)
+        .then((speechResult) => {
+          setSpeech(speechResult);
+          playSpeech(speechResult, next.aiText);
+        })
+        .catch(() => {
+          setSpeechNotice("真人 TTS 暂时不可用，可以先开始练习，稍后再重播。");
+        })
+        .finally(() => setBusy(""));
+    } catch {
+      setBusy("");
+      setCoachState("idle");
+      setStartError("无法创建练习任务，请确认本地 API 服务 5174 正常运行后再试。");
+    }
   }
 
   async function beginRecording() {
@@ -503,10 +522,11 @@ export default function App() {
               onChange={setCustomForm}
               onApply={applyCustomScenario}
             />
-            <button className="primary" onClick={startPractice}>
+            <button className="primary" onClick={startPractice} disabled={Boolean(busy)}>
               <Sparkles size={18} />
-              开始 5 分钟练习
+              {busy || "开始 5 分钟练习"}
             </button>
+            {startError && <div className="hint-line">{startError}</div>}
           </div>
           <CoachAvatar state="idle" />
         </section>
