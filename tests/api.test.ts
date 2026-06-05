@@ -84,6 +84,8 @@ describe("local API in mock mode", () => {
 
     expect(turn.body.aiText).toContain("result");
     expect(turn.body.hintZh).toContain("具体");
+    expect(typeof turn.body.positiveFeedback).toBe("string");
+    expect(turn.body.positiveFeedback.length).toBeGreaterThan(0);
 
     const speech = await request(app)
       .post("/api/tts/synthesize")

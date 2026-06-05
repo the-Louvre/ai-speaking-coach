@@ -60,6 +60,9 @@ export function mockDialogueTurn(userText: string, round: number): DialogueTurnR
     aiText: resultWord,
     hintZh: "回答要更具体：先说结果，再补数字或用户影响。",
     coachState: "asking",
+    positiveFeedback: /result|improved|increase|reduced|saved|score/i.test(userText)
+      ? "很好，你开始补充具体结果了。"
+      : "你已经说清楚项目主题了，这一轮回答有基本结构。",
     correctionPreview:
       round <= 1
         ? "建议把 I built campus navigation app 改为 I built a campus navigation app."
