@@ -103,6 +103,8 @@ export default function App() {
   const [latestAiText, setLatestAiText] = useState("");
   const [latestHint, setLatestHint] = useState("");
   const [speech, setSpeech] = useState<SpeechAudioResult | null>(null);
+  const [speechNotice, setSpeechNotice] = useState("");
+  const [speechAudioSrc, setSpeechAudioSrc] = useState("");
   const [report, setReport] = useState<ReportResult | null>(null);
   const [checkin, setCheckin] = useState<CheckinState>(() => loadCheckin());
   const [learning, setLearning] = useState<LearningState>(() => loadLearning());
@@ -112,6 +114,8 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
 
   const todayDone = checkin.completedDates.includes(getShanghaiDate());
   const currentRound = turns.length + 1;
@@ -148,6 +152,16 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [screen]);
 
+  useEffect(() => {
+    return () => {
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current);
+        audioUrlRef.current = null;
+      }
+      window.speechSynthesis?.cancel();
+    };
+  }, []);
+
   const coachLine = useMemo(() => {
     if (screen === "report" && report) return report.coachCommentZh;
     if (todayDone) return "今日已完成，可以再练一轮，把答案压得更准。";
@@ -158,17 +172,21 @@ export default function App() {
     setBusy("创建练习任务");
     setCoachState("thinking");
     const next = await api.startSession(scenario.id, task.id, isCustomScenario(scenario) ? scenario : undefined);
+    setBusy("生成教练语音");
+    const speechResult = await api.synthesize(next.aiText);
     setSession(next);
     setScenario(next.scenario);
     setTask(next.task);
     setLatestAiText(next.aiText);
     setLatestHint(next.hintZh);
+    setSpeech(speechResult);
     setTurns([]);
     setDraft("");
     setReport(null);
     setCoachState("asking");
     setScreen("practice");
     setBusy("");
+    playSpeech(speechResult, next.aiText);
   }
 
   async function beginRecording() {
@@ -244,6 +262,7 @@ export default function App() {
     setLatestAiText(turnResult.aiText);
     setLatestHint(turnResult.hintZh);
     setSpeech(speechResult);
+    playSpeech(speechResult, turnResult.aiText);
     setDraft("");
     setCoachState(turnResult.coachState);
     setBusy("");
@@ -310,13 +329,65 @@ export default function App() {
     setTask(nextScenario.tasks[0]);
   }
 
-  function replaySpeech() {
-    if (!latestAiText) return;
+  function speakWithBrowser(text: string) {
+    if (!text) return;
+    setSpeechNotice("当前没有可用真人 TTS 音频，临时使用浏览器合成音。");
     window.speechSynthesis?.cancel();
-    const utterance = new SpeechSynthesisUtterance(latestAiText);
+    const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = "en-US";
     utterance.rate = 0.95;
     window.speechSynthesis?.speak(utterance);
+  }
+
+  function playSpeech(result: SpeechAudioResult | null, text: string) {
+    setSpeechNotice("");
+    // 优先播放后端返回的真实 TTS 音频（Cartesia/Qwen）；只有 mock 模式才回退浏览器合成音。
+    const hasRealAudio = Boolean(result?.audioBase64) && result?.format !== "mock" && !result?.fallback;
+    if (!hasRealAudio || !result?.audioBase64) {
+      setSpeechAudioSrc("");
+      if (result?.provider === "mock" || result?.format === "mock") {
+        speakWithBrowser(text);
+      } else {
+        setSpeechNotice("真人 TTS 音频不可用，请检查 TTS Key 或 provider 配置。");
+      }
+      return;
+    }
+
+    try {
+      window.speechSynthesis?.cancel();
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current);
+        audioUrlRef.current = null;
+      }
+      setSpeechAudioSrc("");
+
+      const binary = atob(result.audioBase64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      const mime = result.format === "wav" ? "audio/wav" : "audio/mpeg";
+      const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+      audioUrlRef.current = url;
+      setSpeechAudioSrc(url);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onplaying = () => setSpeechNotice("正在播放真人教练语音。");
+      audio.onended = () => setSpeechNotice("");
+      audio.onerror = () => setSpeechNotice("真人 TTS 音频解码失败，请重新生成或更换 voice。");
+      void audio.play().catch(() => {
+        setSpeechNotice("浏览器拦截了自动播放，点击“重播 AI”播放真人教练语音。");
+      });
+    } catch {
+      setSpeechNotice("真人 TTS 音频播放失败，请重新生成或更换 voice。");
+    }
+  }
+
+  function replaySpeech() {
+    playSpeech(speech, latestAiText);
   }
 
   return (
@@ -497,7 +568,16 @@ export default function App() {
             </div>
 
             <div className="hint-line">{busy || latestHint}</div>
+            {speechNotice && <div className="hint-line">{speechNotice}</div>}
             {speech && <div className="hint-line">TTS 状态：{speech.provider} / {speech.format}</div>}
+            {speechAudioSrc && (
+              <audio
+                className="tts-player"
+                controls
+                src={speechAudioSrc}
+                aria-label="AI 教练真人语音播放器"
+              />
+            )}
           </section>
 
           <aside className="panel progress-panel">
