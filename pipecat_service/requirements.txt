@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+loguru
+httpx
+pipecat-ai[assemblyai,cartesia,openai,webrtc]

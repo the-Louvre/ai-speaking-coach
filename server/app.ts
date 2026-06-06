@@ -107,6 +107,44 @@ export function createApp(options: AppOptions = {}) {
     res.json({ session });
   });
 
+  app.post("/api/session/:sessionId/turns", (req, res) => {
+    const session = practiceSessionStore.get(req.params.sessionId);
+    if (!session) {
+      res.status(404).json({ error: "practice_session not found" });
+      return;
+    }
+
+    const speaker = String(req.body?.speaker || "");
+    const text = String(req.body?.text || "").trim();
+    if (!["ai", "user", "system"].includes(speaker) || !text) {
+      res.status(400).json({ error: "speaker must be ai/user/system and text is required" });
+      return;
+    }
+
+    const turn = practiceSessionStore.addTurn(session.id, {
+      speaker: speaker as "ai" | "user" | "system",
+      text,
+      timestamp: String(req.body?.timestamp || new Date().toISOString()),
+      transcriptConfidence:
+        typeof req.body?.transcriptConfidence === "number" ? req.body.transcriptConfidence : undefined,
+      audioDurationSec: typeof req.body?.audioDurationSec === "number" ? req.body.audioDurationSec : undefined,
+      latencyMs: typeof req.body?.latencyMs === "number" ? req.body.latencyMs : undefined,
+      hintZh: typeof req.body?.hintZh === "string" ? req.body.hintZh : undefined,
+      keywords: Array.isArray(req.body?.keywords) ? req.body.keywords.map(String) : undefined
+    });
+
+    res.json({ turn, session });
+  });
+
+  app.post("/api/session/:sessionId/end", (req, res) => {
+    const session = practiceSessionStore.end(req.params.sessionId);
+    if (!session) {
+      res.status(404).json({ error: "practice_session not found" });
+      return;
+    }
+    res.json({ session });
+  });
+
   app.post("/api/asr/transcribe", upload.single("audio"), async (req, res) => {
     const result = await transcribeWithDeepgram(req.file, config);
     res.json(result);

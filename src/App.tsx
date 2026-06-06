@@ -3,23 +3,19 @@ import {
   BarChart3,
   CalendarDays,
   Headphones,
-  Mic,
-  Pause,
   PencilLine,
   Play,
-  RefreshCw,
   Route,
   Settings,
   Sparkles,
   Square,
-  Target,
-  Volume2
+  Target
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CoachState, ConversationTurn, PracticeSession, ReportResult, SpeechAudioResult } from "../shared/schemas";
+import type { CoachState, ConversationTurn, PracticeSession, ReportResult } from "../shared/schemas";
 import type { Scenario } from "../server/data";
-import { api, createPracticeSocket, type HealthResult, type PracticeRealtimeEvent } from "./api";
+import { api, createPipecatOfferUrl, type HealthResult } from "./api";
 import { ApiSettingsPanel } from "./components/ApiSettingsPanel";
 import { BrandTopBar } from "./components/BrandGuidelines";
 import { CoachAvatar } from "./components/CoachAvatar";
@@ -40,9 +36,10 @@ import {
   summarizeLearning,
   type LearningState
 } from "./domain/learning";
+import { createPipecatVoiceClient, type PipecatVoiceClient, type PipecatVoiceTurn } from "./pipecatVoiceClient";
 
 type Screen = "home" | "prep" | "practice" | "report";
-type PracticeStatus = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "paused" | "completed";
+type PracticeStatus = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "ended" | "completed";
 type JourneyStatus = "done" | "active" | "waiting";
 type JourneyStep = {
   label: string;
@@ -95,29 +92,19 @@ export default function App() {
   const [remainingSeconds, setRemainingSeconds] = useState(5 * 60);
   const [selectedDurationMinutes, setSelectedDurationMinutes] = useState(5);
   const [coachState, setCoachState] = useState<CoachState>("idle");
-  const [draft, setDraft] = useState("");
   const [conversationTurns, setConversationTurns] = useState<ConversationTurn[]>([]);
   const [latestAiText, setLatestAiText] = useState("");
   const [latestHint, setLatestHint] = useState("");
-  const [positiveFeedback, setPositiveFeedback] = useState("");
-  const [keywords, setKeywords] = useState<string[]>(["background", "role", "result"]);
-  const [speech, setSpeech] = useState<SpeechAudioResult | null>(null);
-  const [speechNotice, setSpeechNotice] = useState("");
-  const [speechAudioSrc, setSpeechAudioSrc] = useState("");
   const [report, setReport] = useState<ReportResult | null>(null);
   const [checkin, setCheckin] = useState<CheckinState>(() => loadCheckin());
   const [learning, setLearning] = useState<LearningState>(() => loadLearning());
   const [customForm, setCustomForm] = useState<CustomScenarioForm>(defaultCustomForm);
   const [busy, setBusy] = useState("");
   const [startError, setStartError] = useState("");
-  const [recording, setRecording] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const audioUrlRef = useRef<string | null>(null);
-  const socketRef = useRef<WebSocket | null>(null);
+  const voiceClientRef = useRef<PipecatVoiceClient | null>(null);
   const countdownRef = useRef<number | null>(null);
+  const recordedTurnKeysRef = useRef(new Set<string>());
 
   const todayDone = checkin.completedDates.includes(getShanghaiDate());
   const learningSummary = useMemo(() => summarizeLearning(learning), [learning]);
@@ -128,12 +115,10 @@ export default function App() {
       createJourneySteps({
         screen,
         busy,
-        recording,
         turnCount: userTurnCount,
-        hasDraft: Boolean(draft.trim()),
         hasReport: Boolean(report)
       }),
-    [busy, draft, recording, report, screen, userTurnCount]
+    [busy, report, screen, userTurnCount]
   );
 
   useEffect(() => {
@@ -155,12 +140,7 @@ export default function App() {
 
   useEffect(() => {
     return () => {
-      socketRef.current?.close();
-      if (audioUrlRef.current) {
-        URL.revokeObjectURL(audioUrlRef.current);
-        audioUrlRef.current = null;
-      }
-      window.speechSynthesis?.cancel();
+      void voiceClientRef.current?.disconnect();
       if (countdownRef.current) {
         window.clearInterval(countdownRef.current);
       }
@@ -178,247 +158,153 @@ export default function App() {
     setScreen("practice");
   }
 
-  function startCountdown(initialSeconds: number) {
+  function startCountdown(initialSeconds: number, sessionId: string) {
     if (countdownRef.current) window.clearInterval(countdownRef.current);
     setRemainingSeconds(initialSeconds);
     countdownRef.current = window.setInterval(() => {
-      setRemainingSeconds((current) => Math.max(0, current - 1));
+      setRemainingSeconds((current) => {
+        if (current <= 1) {
+          if (countdownRef.current) window.clearInterval(countdownRef.current);
+          void endTraining(sessionId);
+          return 0;
+        }
+        return current - 1;
+      });
     }, 1000);
   }
 
-  function handleRealtimeEvent(event: PracticeRealtimeEvent) {
-    if (event.type === "session_started") {
-      setPracticeSession(event.session);
-      setConversationTurns(event.session.conversation_turns);
-      setLatestAiText(event.aiText);
-      setKeywords(event.keywords);
-      setRemainingSeconds(event.remainingSeconds);
-      setPracticeStatus("listening");
-      setCoachState("asking");
-      setBusy("");
-      startCountdown(event.remainingSeconds);
-      void api.synthesize(event.aiText).then((speechResult) => {
-        setSpeech(speechResult);
-        playSpeech(speechResult, event.aiText);
-      });
+  function updatePracticeStatusFromPipecat(status: string) {
+    if (status === "connecting" || status === "initializing" || status === "authenticating") {
+      setPracticeStatus("connecting");
+      setCoachState("thinking");
       return;
     }
-
-    if (event.type === "status") {
-      if (event.status === "paused") setPracticeStatus("paused");
-      if (event.status === "listening") setPracticeStatus("listening");
-      if (event.status === "thinking") setPracticeStatus("thinking");
-      if (typeof event.remainingSeconds === "number") setRemainingSeconds(event.remainingSeconds);
-      return;
-    }
-
-    if (event.type === "transcript_final") {
-      setConversationTurns((items) => [...items, event.turn]);
-      setDraft("");
-      return;
-    }
-
-    if (event.type === "ai_reply") {
-      setConversationTurns((items) => [...items, event.turn]);
-      setLatestAiText(event.turn.text);
-      setLatestHint(event.hintZh);
-      setPositiveFeedback(event.positiveFeedback);
-      setKeywords(event.keywords);
-      setRemainingSeconds(event.remainingSeconds);
-      setSpeech(event.speech);
-      setBusy("");
+    if (status === "bot-speaking") {
       setPracticeStatus("speaking");
       setCoachState("asking");
-      playSpeech(event.speech, event.turn.text);
-      window.setTimeout(() => setPracticeStatus("listening"), 900);
       return;
     }
-
-    if (event.type === "session_finished") {
-      if (countdownRef.current) window.clearInterval(countdownRef.current);
-      setPracticeSession(event.session);
-      setConversationTurns(event.session.conversation_turns);
-      setReport(event.report);
-      setCheckin(completeToday(event.report.totalScore, event.report.reportId));
-      setLearning(
-        recordLearning(
-          createLearningRecord({
-            date: getShanghaiDate(),
-            scenarioNameZh: scenario.nameZh,
-            scenarioNameEn: scenario.nameEn,
-            taskTitleZh: task.titleZh,
-            focus: task.focus,
-            roundCount: event.session.conversation_turns.filter((turn) => turn.speaker === "user").length,
-            report: event.report
-          })
-        )
-      );
-      setPracticeStatus("completed");
-      setCoachState("celebrating");
-      setScreen("report");
-      setBusy("");
-      return;
-    }
-
-    if (event.type === "error") {
-      setBusy("");
-      setStartError(event.message);
-      setPracticeStatus("idle");
+    if (status === "user-speaking" || status === "ready" || status === "bot-ready" || status === "connected") {
+      setPracticeStatus("listening");
+      setCoachState("listening");
     }
   }
 
-  function sendRealtime(payload: Record<string, unknown>) {
-    const socket = socketRef.current;
-    if (!socket || socket.readyState !== WebSocket.OPEN) {
-      setStartError("实时对话连接未建立，请重新点击开始对话。");
-      return false;
-    }
-    socket.send(JSON.stringify(payload));
-    return true;
+  function dedupeVoiceTurn(turn: PipecatVoiceTurn) {
+    const key = `${turn.speaker}:${turn.text}`;
+    if (recordedTurnKeysRef.current.has(key)) return true;
+    recordedTurnKeysRef.current.add(key);
+    return false;
   }
 
-  function startConversation() {
-    setBusy("连接实时对话");
+  async function recordVoiceTurn(turn: PipecatVoiceTurn, sessionId: string) {
+    if (dedupeVoiceTurn(turn)) return;
+    const result = await api.addSessionTurn(sessionId, {
+      speaker: turn.speaker,
+      text: turn.text,
+      timestamp: turn.timestamp || new Date().toISOString()
+    });
+    setPracticeSession(result.session);
+    setConversationTurns(result.session.conversation_turns);
+    if (turn.speaker === "ai") {
+      setLatestAiText(turn.text);
+      setPracticeStatus("speaking");
+      setCoachState("asking");
+      window.setTimeout(() => setPracticeStatus("listening"), 800);
+    }
+  }
+
+  async function startConversation() {
+    setBusy("连接 Pipecat Voice Agent");
     setStartError("");
-    setSpeechNotice("");
-    setSpeechAudioSrc("");
-    setSpeech(null);
-    setPositiveFeedback("");
     setLatestHint("");
     setConversationTurns([]);
     setPracticeSession(null);
     setReport(null);
     setPracticeStatus("connecting");
     setCoachState("thinking");
+    recordedTurnKeysRef.current.clear();
 
-    socketRef.current?.close();
-    const socket = createPracticeSocket();
-    socketRef.current = socket;
-    socket.onmessage = (message) => handleRealtimeEvent(JSON.parse(message.data) as PracticeRealtimeEvent);
-    socket.onerror = () => {
-      setStartError("实时对话连接失败，请确认本地 API 服务 5174 正常运行。");
-      setBusy("");
-      setPracticeStatus("idle");
-      setCoachState("idle");
-    };
-    socket.onclose = () => {
-      setBusy("");
-    };
-    socket.onopen = () => {
-      socket.send(
-        JSON.stringify({
-          type: "start",
+    try {
+      await voiceClientRef.current?.disconnect();
+      const started = await api.startSession(
+        scenario.id,
+        task.id,
+        isCustomScenario(scenario) ? scenario : undefined,
+        selectedDurationMinutes
+      );
+      setPracticeSession(started.session);
+      setConversationTurns(started.session.conversation_turns);
+      setLatestAiText(started.aiText);
+      setRemainingSeconds(started.remainingSeconds);
+      startCountdown(started.remainingSeconds, started.sessionId);
+
+      const client = createPipecatVoiceClient({
+        webrtcUrl: createPipecatOfferUrl({
+          sessionId: started.sessionId,
           scenarioId: scenario.id,
           taskId: task.id,
-          customScenario: isCustomScenario(scenario) ? scenario : undefined,
-          durationMinutes: selectedDurationMinutes
-        })
-      );
-    };
-  }
-
-  async function beginRecording() {
-    if (!practiceSession) {
-      setLatestHint("请先点击“开始对话”，创建连续训练 session。");
-      return;
-    }
-
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setLatestHint("当前浏览器无法录音，可以直接输入回答或使用模拟转写。");
-      return;
-    }
-
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const recorder = new MediaRecorder(stream);
-    chunksRef.current = [];
-    recorder.ondataavailable = (event) => {
-      if (event.data.size > 0) chunksRef.current.push(event.data);
-    };
-    recorder.onstop = () => {
-      stream.getTracks().forEach((track) => track.stop());
-      const audio = new Blob(chunksRef.current, { type: "audio/webm" });
-      void runTranscription(audio);
-    };
-    recorder.start();
-    recorderRef.current = recorder;
-    setRecording(true);
-    setCoachState("listening");
-  }
-
-  function stopRecording() {
-    recorderRef.current?.stop();
-    setRecording(false);
-    setCoachState("thinking");
-  }
-
-  async function runTranscription(audio?: Blob) {
-    if (!practiceSession) return;
-    setBusy("VAD 已断句，识别语音");
-    setCoachState("thinking");
-    setPracticeStatus("thinking");
-    const transcript = await api.transcribe(audio);
-    setDraft(transcript.text);
-    setLatestHint(
-      transcript.fallback
-        ? "当前使用模拟转写，系统已自动把这句话发给 AI。"
-        : `转写置信度 ${(transcript.confidence * 100).toFixed(0)}%，系统已自动断句。`
-    );
-    const sent = sendRealtime({
-      type: "user_utterance",
-      sessionId: practiceSession.id,
-      text: transcript.text,
-      transcriptConfidence: transcript.confidence,
-      audioDurationSec: transcript.durationSec
-    });
-    setCoachState("thinking");
-    if (!sent) setBusy("");
-  }
-
-  function sendUserUtterance(text: string) {
-    if (!practiceSession || !text.trim()) return;
-    setBusy("VAD 已断句，生成追问");
-    setCoachState("thinking");
-    setPracticeStatus("thinking");
-    const sent = sendRealtime({
-      type: "user_utterance",
-      sessionId: practiceSession.id,
-      text,
-      transcriptConfidence: 0.93,
-      audioDurationSec: 4.1
-    });
-    if (!sent) setBusy("");
-    setDraft("");
-  }
-
-  function simulateUtterance() {
-    const samples = [
-      "It is about my AI urgent.",
-      "I built a campus navigation app and improved the route flow.",
-      "My role was designing the interaction and testing the route planning feature.",
-      "The result was reducing route search time by about thirty percent."
-    ];
-    const next = samples[userTurnCount % samples.length];
-    setDraft(next);
-    window.setTimeout(() => sendUserUtterance(next), 900);
-  }
-
-  function pauseConversation() {
-    if (!practiceSession) return;
-    if (practiceStatus === "paused") {
-      sendRealtime({ type: "resume", sessionId: practiceSession.id });
+          targetGoal: task.focus
+        }),
+        callbacks: {
+          onStatus: updatePracticeStatusFromPipecat,
+          onTurn: (turn) => {
+            void recordVoiceTurn(turn, started.sessionId).catch((error) => {
+              setStartError(error instanceof Error ? error.message : "写入实时对话记录失败。");
+            });
+          },
+          onError: (message) => {
+            setStartError(message);
+            setBusy("");
+            setPracticeStatus("idle");
+            setCoachState("idle");
+          },
+          onDisconnected: () => {
+            setBusy("");
+            setPracticeStatus((current) => (current === "completed" ? current : "ended"));
+            setCoachState("reviewing");
+          }
+        }
+      });
+      voiceClientRef.current = client;
+      await client.connect();
+      setBusy("");
       setPracticeStatus("listening");
-      return;
+      setCoachState("listening");
+    } catch (error) {
+      setBusy("");
+      if (countdownRef.current) window.clearInterval(countdownRef.current);
+      await voiceClientRef.current?.disconnect().catch(() => null);
+      voiceClientRef.current = null;
+      setPracticeStatus("idle");
+      setCoachState("idle");
+      setStartError(
+        error instanceof Error
+          ? error.message
+          : "Pipecat Voice Agent 连接失败，请确认 Python 服务运行在 127.0.0.1:7860。"
+      );
     }
-    sendRealtime({ type: "pause", sessionId: practiceSession.id });
-    setPracticeStatus("paused");
   }
 
-  async function finishSession() {
+  async function endTraining(sessionIdOverride?: string) {
+    const activeSessionId = sessionIdOverride || practiceSession?.id;
+    if (!activeSessionId) return;
+    setBusy("关闭实时语音连接");
+    await voiceClientRef.current?.disconnect().catch(() => null);
+    voiceClientRef.current = null;
+    if (countdownRef.current) window.clearInterval(countdownRef.current);
+    const ended = await api.endSession(activeSessionId).catch(() => null);
+    if (ended) setPracticeSession(ended.session);
+    setPracticeStatus("ended");
+    setCoachState("reviewing");
+    setBusy("");
+  }
+
+  async function generatePracticeReport() {
     if (!practiceSession) return;
     setBusy("生成课后报告");
     setCoachState("reviewing");
     setPracticeStatus("thinking");
-    if (sendRealtime({ type: "end", sessionId: practiceSession.id })) return;
 
     const result = await api.generateReport({
       sessionId: practiceSession.id,
@@ -445,6 +331,7 @@ export default function App() {
       )
     );
     setCoachState("celebrating");
+    setPracticeStatus("completed");
     setScreen("report");
     setBusy("");
   }
@@ -474,67 +361,6 @@ export default function App() {
     setScenarios((items) => [nextScenario, ...items.filter((item) => item.id !== nextScenario.id)]);
     setScenario(nextScenario);
     setTask(nextScenario.tasks[0]);
-  }
-
-  function speakWithBrowser(text: string) {
-    if (!text) return;
-    setSpeechNotice("当前没有可用真人 TTS 音频，临时使用浏览器合成音。");
-    window.speechSynthesis?.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "en-US";
-    utterance.rate = 0.95;
-    window.speechSynthesis?.speak(utterance);
-  }
-
-  function playSpeech(result: SpeechAudioResult | null, text: string) {
-    setSpeechNotice("");
-    // 优先播放后端返回的真实 TTS 音频（Cartesia/Qwen）；只有 mock 模式才回退浏览器合成音。
-    const hasRealAudio = Boolean(result?.audioBase64) && result?.format !== "mock" && !result?.fallback;
-    if (!hasRealAudio || !result?.audioBase64) {
-      setSpeechAudioSrc("");
-      if (result?.provider === "mock" || result?.format === "mock") {
-        speakWithBrowser(text);
-      } else {
-        setSpeechNotice("真人 TTS 音频不可用，请检查 TTS Key 或 provider 配置。");
-      }
-      return;
-    }
-
-    try {
-      window.speechSynthesis?.cancel();
-      if (audioRef.current) {
-        audioRef.current.pause();
-      }
-      if (audioUrlRef.current) {
-        URL.revokeObjectURL(audioUrlRef.current);
-        audioUrlRef.current = null;
-      }
-      setSpeechAudioSrc("");
-
-      const binary = atob(result.audioBase64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i += 1) {
-        bytes[i] = binary.charCodeAt(i);
-      }
-      const mime = result.format === "wav" ? "audio/wav" : "audio/mpeg";
-      const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
-      audioUrlRef.current = url;
-      setSpeechAudioSrc(url);
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      audio.onplaying = () => setSpeechNotice("正在播放真人教练语音。");
-      audio.onended = () => setSpeechNotice("");
-      audio.onerror = () => setSpeechNotice("真人 TTS 音频解码失败，请重新生成或更换 voice。");
-      void audio.play().catch(() => {
-        setSpeechNotice("浏览器拦截了自动播放，点击“重播 AI”播放真人教练语音。");
-      });
-    } catch {
-      setSpeechNotice("真人 TTS 音频播放失败，请重新生成或更换 voice。");
-    }
-  }
-
-  function replaySpeech() {
-    playSpeech(speech, latestAiText);
   }
 
   return (
@@ -758,15 +584,53 @@ export default function App() {
         </div>
         <section className="practice-grid">
           <div className="stage dialogue-room">
-            <div className="stage-q">{latestAiText || "点击开始对话，AI 会围绕当前目标持续追问。"}</div>
+            <div className="stage-q">{latestAiText || "点击开始训练，Pipecat 会接管实时语音陪练。"}</div>
             <div className="stage-mascot">
               <CoachAvatar state={coachState} size={150} />
             </div>
-            <div className="caption-stream" aria-label="会议式实时字幕流">
+            <div className="mic-status">
+              <Headphones size={18} />
+              {practiceSession ? "Pipecat Voice Agent 已接管 VAD / STT / LLM / TTS" : "尚未开始训练"}
+            </div>
+            {(busy || latestHint || startError) && (
+              <div className={`round-tip ${startError ? "error" : ""}`}>{busy || startError || latestHint}</div>
+            )}
+            <div className="voice-primary-controls" aria-label="实时训练控制">
+              <button
+                className="primary wide"
+                onClick={startConversation}
+                disabled={Boolean(busy) || (practiceStatus !== "idle" && practiceStatus !== "completed")}
+              >
+                <Play size={18} />
+                开始训练
+              </button>
+              <button
+                className="danger wide"
+                onClick={() => void endTraining()}
+                disabled={!practiceSession || practiceStatus === "ended" || practiceStatus === "completed" || Boolean(busy)}
+              >
+                <Square size={17} />
+                结束训练
+              </button>
+              <button
+                className="secondary wide"
+                onClick={generatePracticeReport}
+                disabled={!practiceSession || practiceStatus !== "ended" || Boolean(busy)}
+              >
+                <Sparkles size={17} />
+                生成报告
+              </button>
+            </div>
+            <p className="muted stage-note">浏览器只负责 WebRTC 连接；VAD、转写、追问和播报由 Pipecat Voice Agent 处理。</p>
+          </div>
+
+          <aside className="practice-side voice-log-side" aria-label="实时对话记录">
+            <span className="eyebrow">实时对话记录</span>
+            <div className="caption-stream voice-only-log">
               {conversationTurns.length === 0 ? (
-                <div className="caption-line system">字幕会在这里按时间流动，不需要手动提交每一轮。</div>
+                <div className="caption-line system">开始训练后，用户和 AI 的每句话会实时写入这里。</div>
               ) : (
-                conversationTurns.slice(-6).map((turn) => (
+                conversationTurns.map((turn) => (
                   <div className={`caption-line ${turn.speaker}`} key={turn.id}>
                     <span>{turn.speaker === "ai" ? "AI" : turn.speaker === "user" ? "You" : "System"}</span>
                     <p>{turn.text}</p>
@@ -774,85 +638,6 @@ export default function App() {
                 ))
               )}
             </div>
-            {draft && <div className="stage-subtitle">{draft}</div>}
-            {recording && <div className="stage-ring" />}
-            <div className="mic-status">
-              <Mic size={18} />
-              {recording ? "麦克风采集中，停顿后自动断句" : practiceSession ? "实时字幕待命" : "尚未开始对话"}
-            </div>
-            <p className="muted stage-note">VAD 断句窗口：停顿 0.8–1.2 秒自动处理；沉默 6 秒 AI 会提示。</p>
-          </div>
-
-          <aside className="practice-side">
-            <div className="goal-now">
-              <span className="eyebrow">训练目标</span>
-              <p>{task.focus}</p>
-            </div>
-            {positiveFeedback && <div className="round-tip">👏 {positiveFeedback}</div>}
-            {(busy || latestHint) && <div className="round-tip">💡 {busy || latestHint}</div>}
-            {speechNotice && <div className="round-tip">{speechNotice}</div>}
-
-            <div className="keyword-panel">
-              <span className="eyebrow">表达提示</span>
-              <div>
-                {keywords.map((keyword) => (
-                  <span key={keyword}>{keyword}</span>
-                ))}
-              </div>
-            </div>
-
-            <label className="caption-input">
-              <span>本地演示输入</span>
-              <textarea
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                placeholder="可输入一句英文，系统会模拟 VAD 停顿后自动发送..."
-              />
-            </label>
-
-            <div className="conversation-controls">
-              {!practiceSession ? (
-                <button className="primary wide" onClick={startConversation} disabled={Boolean(busy)}>
-                  <Play size={18} />
-                  开始对话
-                </button>
-              ) : (
-                <button className="secondary wide" onClick={recording ? stopRecording : beginRecording} disabled={practiceStatus === "paused" || Boolean(busy)}>
-                  <Mic size={18} />
-                  {recording ? "停止录音并自动断句" : "开启麦克风"}
-                </button>
-              )}
-              <button className="secondary wide" onClick={pauseConversation} disabled={!practiceSession || Boolean(busy)}>
-                {practiceStatus === "paused" ? <Play size={17} /> : <Pause size={17} />}
-                {practiceStatus === "paused" ? "继续" : "暂停"}
-              </button>
-              <button className="secondary wide" onClick={() => sendUserUtterance(draft)} disabled={!practiceSession || !draft.trim() || Boolean(busy)}>
-                <Sparkles size={17} />
-                VAD 自动发送这句话
-              </button>
-              <button className="secondary wide" onClick={simulateUtterance} disabled={!practiceSession || Boolean(busy)}>
-                <RefreshCw size={18} />
-                模拟一句
-              </button>
-              <button className="ghost wide" onClick={replaySpeech} disabled={!latestAiText}>
-                <Volume2 size={17} />
-                重播上一句
-              </button>
-              <button className="danger wide" onClick={finishSession} disabled={!practiceSession || userTurnCount === 0 || Boolean(busy)}>
-                <Square size={17} />
-                结束训练
-              </button>
-            </div>
-
-            <div className="tech-fold">🟢 WebSocket 对话链路 {speech ? `· TTS ${speech.provider}` : "· 待开始"}</div>
-            {speechAudioSrc && (
-              <audio
-                className="tts-player"
-                controls
-                src={speechAudioSrc}
-                aria-label="AI 教练真人语音播放器"
-              />
-            )}
           </aside>
         </section>
         </>
@@ -943,10 +728,10 @@ function practiceStatusLabel(status: PracticeStatus) {
   const labels: Record<PracticeStatus, string> = {
     idle: "待开始",
     connecting: "连接中",
-    listening: "倾听中",
-    thinking: "生成追问",
+    listening: "实时倾听",
+    thinking: "生成报告",
     speaking: "AI 播报",
-    paused: "已暂停",
+    ended: "已结束，待报告",
     completed: "已结束"
   };
   return labels[status];
@@ -1024,16 +809,12 @@ function ConversationLog({ turns }: { turns: ConversationTurn[] }) {
 function createJourneySteps({
   screen,
   busy,
-  recording,
   turnCount,
-  hasDraft,
   hasReport
 }: {
   screen: Screen;
   busy: string;
-  recording: boolean;
   turnCount: number;
-  hasDraft: boolean;
   hasReport: boolean;
 }): JourneyStep[] {
   const inPractice = screen === "practice";
@@ -1047,13 +828,13 @@ function createJourneySteps({
     },
     {
       label: "实时语音对话",
-      detail: "录音转写后由 AI 追问并播报",
-      status: hasReport || turnCount > 0 ? "done" : inPractice || recording || hasDraft ? "active" : "waiting"
+      detail: "Pipecat 接管 VAD、STT、LLM、TTS",
+      status: hasReport || turnCount > 0 ? "done" : inPractice ? "active" : "waiting"
     },
     {
       label: "发音评测",
-      detail: "转写置信度、低置信词、语速聚合",
-      status: hasReport || turnCount > 0 ? "done" : busy.includes("识别") || recording ? "active" : "waiting"
+      detail: "整段对话进入课后七维评估",
+      status: hasReport || turnCount > 0 ? "done" : busy.includes("Pipecat") ? "active" : "waiting"
     },
     {
       label: "语法/表达纠错",

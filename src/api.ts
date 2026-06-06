@@ -105,10 +105,27 @@ export const api = {
       body: JSON.stringify(payload)
     }),
   scenarios: () => requestJson<{ scenarios: Scenario[] }>("/api/scenarios"),
-  startSession: (scenarioId: string, taskId: string, customScenario?: Scenario) =>
+  startSession: (scenarioId: string, taskId: string, customScenario?: Scenario, durationMinutes = 5) =>
     requestJson<SessionStart>("/api/session/start", {
       method: "POST",
-      body: JSON.stringify({ scenarioId, taskId, customScenario })
+      body: JSON.stringify({ scenarioId, taskId, customScenario, durationMinutes })
+    }),
+  addSessionTurn: (
+    sessionId: string,
+    payload: {
+      speaker: "ai" | "user" | "system";
+      text: string;
+      timestamp?: string;
+      transcriptConfidence?: number;
+      audioDurationSec?: number;
+      latencyMs?: number;
+      hintZh?: string;
+      keywords?: string[];
+    }
+  ) =>
+    requestJson<{ turn: ConversationTurn; session: PracticeSession }>(`/api/session/${sessionId}/turns`, {
+      method: "POST",
+      body: JSON.stringify(payload)
     }),
   transcribe: (audio?: Blob) => {
     const form = new FormData();
@@ -142,35 +159,26 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload)
     }),
-  readSession: (sessionId: string) => requestJson<{ session: PracticeSession }>(`/api/session/${sessionId}`)
+  readSession: (sessionId: string) => requestJson<{ session: PracticeSession }>(`/api/session/${sessionId}`),
+  endSession: (sessionId: string) =>
+    requestJson<{ session: PracticeSession }>(`/api/session/${sessionId}/end`, {
+      method: "POST"
+    })
 };
 
-export type PracticeRealtimeEvent =
-  | {
-      type: "session_started";
-      session: PracticeSession;
-      aiText: string;
-      remainingSeconds: number;
-      keywords: string[];
-    }
-  | { type: "status"; sessionId: string; status: string; remainingSeconds?: number }
-  | { type: "transcript_final"; sessionId: string; turn: ConversationTurn }
-  | {
-      type: "ai_reply";
-      sessionId: string;
-      turn: ConversationTurn;
-      speech: SpeechAudioResult;
-      hintZh: string;
-      positiveFeedback: string;
-      correctionPreview: string;
-      keywords: string[];
-      remainingSeconds: number;
-    }
-  | { type: "session_finished"; session: PracticeSession; report: ReportResult }
-  | { type: "error"; message: string };
-
-export function createPracticeSocket() {
-  const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-  const host = window.location.port === "5173" ? `${window.location.hostname}:5174` : window.location.host;
-  return new WebSocket(`${protocol}://${host}/api/practice/ws`);
+export function createPipecatOfferUrl(params: {
+  sessionId: string;
+  scenarioId: string;
+  taskId: string;
+  targetGoal: string;
+}) {
+  const baseUrl = import.meta.env.VITE_PIPECAT_BASE_URL || "http://127.0.0.1:7860";
+  const businessApiUrl = import.meta.env.VITE_BUSINESS_API_URL || "http://127.0.0.1:5174";
+  const url = new URL("/api/offer", baseUrl);
+  url.searchParams.set("session_id", params.sessionId);
+  url.searchParams.set("scenario_id", params.scenarioId);
+  url.searchParams.set("task_id", params.taskId);
+  url.searchParams.set("target_goal", params.targetGoal);
+  url.searchParams.set("business_api_url", businessApiUrl);
+  return url.toString();
 }

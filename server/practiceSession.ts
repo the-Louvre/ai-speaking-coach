@@ -81,14 +81,23 @@ export function markSessionRunning(session: PracticeSession) {
   return session;
 }
 
+export function markSessionEnded(
+  session: PracticeSession,
+  now = new Date(Date.now()),
+  status: "completed" | "expired" = "completed"
+) {
+  session.status = status;
+  session.end_time = now.toISOString();
+  return session;
+}
+
 export function completePracticeSession(
   session: PracticeSession,
   report: ReportResult,
   now = new Date(Date.now()),
   status: "completed" | "expired" = "completed"
 ) {
-  session.status = status;
-  session.end_time = now.toISOString();
+  markSessionEnded(session, now, status);
   session.final_report = report;
   return session;
 }
@@ -116,5 +125,11 @@ export class PracticeSessionStore {
     const session = this.sessions.get(sessionId);
     if (!session) return null;
     return completePracticeSession(session, report);
+  }
+
+  end(sessionId: string, status: "completed" | "expired" = "completed") {
+    const session = this.sessions.get(sessionId);
+    if (!session) return null;
+    return markSessionEnded(session, new Date(), status);
   }
 }

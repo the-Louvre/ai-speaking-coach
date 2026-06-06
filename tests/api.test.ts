@@ -63,6 +63,67 @@ describe("local API in mock mode", () => {
     expect(response.body.aiText).toContain("explain the value");
   });
 
+  it("records Pipecat voice-agent turns into the active practice session", async () => {
+    const started = await request(app)
+      .post("/api/session/start")
+      .send({ scenarioId: "interview", taskId: "internship-intro", durationMinutes: 7 })
+      .expect(200);
+
+    const userTurn = await request(app)
+      .post(`/api/session/${started.body.sessionId}/turns`)
+      .send({
+        speaker: "user",
+        text: "It is about my AI agent project.",
+        timestamp: "2026-06-06T04:10:00.000Z",
+        latencyMs: 820
+      })
+      .expect(200);
+
+    expect(userTurn.body.turn).toMatchObject({
+      speaker: "user",
+      text: "It is about my AI agent project.",
+      latencyMs: 820
+    });
+    expect(userTurn.body.session.conversation_turns).toHaveLength(2);
+
+    const aiTurn = await request(app)
+      .post(`/api/session/${started.body.sessionId}/turns`)
+      .send({
+        speaker: "ai",
+        text: "Do you mean an AI agent project? What problem did it solve?",
+        timestamp: "2026-06-06T04:10:02.000Z"
+      })
+      .expect(200);
+
+    expect(aiTurn.body.session.conversation_turns.map((turn: { speaker: string }) => turn.speaker)).toEqual([
+      "ai",
+      "user",
+      "ai"
+    ]);
+  });
+
+  it("rejects Pipecat turn writes for missing sessions", async () => {
+    const response = await request(app)
+      .post("/api/session/practice_session_missing/turns")
+      .send({ speaker: "user", text: "hello" })
+      .expect(404);
+
+    expect(response.body.error).toContain("practice_session");
+  });
+
+  it("marks a practice session ended before generating the final report", async () => {
+    const started = await request(app)
+      .post("/api/session/start")
+      .send({ scenarioId: "interview", taskId: "internship-intro", durationMinutes: 5 })
+      .expect(200);
+
+    const ended = await request(app).post(`/api/session/${started.body.sessionId}/end`).expect(200);
+
+    expect(ended.body.session.status).toBe("completed");
+    expect(ended.body.session.end_time).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(ended.body.session.final_report).toBeNull();
+  });
+
   it("transcribes uploaded audio into the shared transcript shape", async () => {
     const response = await request(app)
       .post("/api/asr/transcribe")

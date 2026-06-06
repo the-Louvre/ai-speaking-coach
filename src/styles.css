@@ -2919,11 +2919,41 @@ textarea:focus,
   justify-content: center;
 }
 
+.voice-primary-controls {
+  display: grid;
+  width: min(760px, 100%);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.voice-primary-controls .wide {
+  width: 100%;
+  min-height: 50px;
+  justify-content: center;
+}
+
 button.danger {
   border-color: #d93f3f;
   background: var(--cardinal);
   color: var(--snow);
   box-shadow: 0 4px 0 #d93f3f;
+}
+
+.round-tip.error {
+  border-color: #ff4b4b;
+  background: #fff0f0;
+  color: #b83232;
+}
+
+.voice-log-side {
+  min-height: 620px;
+}
+
+.voice-only-log {
+  width: 100%;
+  min-height: 520px;
+  max-height: 560px;
+  align-content: start;
 }
 
 .tts-player {
@@ -3017,8 +3047,18 @@ button.danger {
     padding: 20px;
   }
 
-  .conversation-controls {
+  .conversation-controls,
+  .voice-primary-controls {
     grid-template-columns: 1fr;
+  }
+
+  .voice-log-side {
+    min-height: auto;
+  }
+
+  .voice-only-log {
+    min-height: 260px;
+    max-height: 420px;
   }
 
   .caption-line,
