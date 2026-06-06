@@ -21,8 +21,9 @@ import { api, checkPipecatHealth, createPipecatOfferUrl, type HealthResult } fro
 import { ApiSettingsPanel } from "./components/ApiSettingsPanel";
 import { BrandTopBar } from "./components/BrandGuidelines";
 import { CoachAvatar } from "./components/CoachAvatar";
+import { ReportDashboard } from "./components/ReportDashboard";
 import { WeekDots } from "./components/WeekDots";
-import { HOME_COPY, REPORT_COPY, VALUE_CARDS } from "./copy/coachCopy";
+import { HOME_COPY, VALUE_CARDS } from "./copy/coachCopy";
 import { getShanghaiDate, type CheckinState } from "./domain/checkin";
 import { GROWTH_MOCK } from "./domain/growthMock";
 import {
@@ -780,70 +781,14 @@ export default function App() {
       )}
 
       {screen === "report" && report && (
-        <section className="report-grid">
-          <div className="score-hero">
-            <div>
-              <div className="score-num">{report.totalScore}</div>
-              <div className="score-denom">/ 100</div>
-            </div>
-            <div>
-              <span className="eyebrow">本次练习 · {scenario.nameZh}</span>
-              <h2>{report.coachCommentZh}</h2>
-              <p>完成目标：{task.focus}</p>
-            </div>
-          </div>
-
-          <div className="panel">
-            <span className="eyebrow">{REPORT_COPY.dimensionsLabel}</span>
-            {report.dimensions.map((dimension) => (
-              <div className="dim" key={dimension.id}>
-                <div className="dim-t">
-                  <span>{dimension.labelZh}</span>
-                  <span>{dimension.score}</span>
-                </div>
-                <div className="dim-bar">
-                  <i style={{ width: `${dimension.score}%` }} />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="panel report-radar-card">
-            <span className="eyebrow">评分雷达图</span>
-            <AbilityRadar dimensions={report.dimensions} />
-          </div>
-
-          <div className="panel report-conversation-card">
-            <span className="eyebrow">完整对话回放</span>
-            <ConversationLog turns={conversationTurns} />
-          </div>
-
-          <div className="panel">
-            <span className="eyebrow">{REPORT_COPY.bestFixLabel}</span>
-            {report.corrections[0] && (
-              <>
-                <p className="fix-orig">Original: {report.corrections[0].original}</p>
-                <p className="fix-better">Better: {report.corrections[0].improved}</p>
-                <p className="muted">{report.corrections[0].explanationZh}</p>
-              </>
-            )}
-          </div>
-
-          <div className="panel">
-            <span className="eyebrow">{REPORT_COPY.replayLabel}</span>
-            <ul className="replay-list">
-              {report.suggestions.map((suggestion) => (
-                <li className="replay-li" key={suggestion}>{suggestion}</li>
-              ))}
-            </ul>
-            <div className="control-row">
-              <button className="secondary" onClick={() => setScreen("prep")}>换个任务</button>
-              <button className="primary" onClick={enterPracticeRoom}>再练一轮</button>
-            </div>
-          </div>
-
-          <div className="encourage">🌱 {report.summaryZh}</div>
-        </section>
+        <ReportDashboard
+          report={report}
+          conversationTurns={conversationTurns}
+          scenario={scenario}
+          targetGoal={task.focus}
+          onChangeTask={() => setScreen("prep")}
+          onPracticeAgain={enterPracticeRoom}
+        />
       )}
       </main>
     </>
@@ -862,75 +807,6 @@ function formatSeconds(value: number) {
 
 function formatTurnTime(value: string) {
   return new Date(value).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
-}
-
-function AbilityRadar({ dimensions }: { dimensions: ReportResult["dimensions"] }) {
-  const size = 238;
-  const center = size / 2;
-  const maxRadius = 78;
-  const angleStep = (Math.PI * 2) / dimensions.length;
-  const points = dimensions.map((dimension, index) => {
-    const angle = -Math.PI / 2 + angleStep * index;
-    const radius = (dimension.score / 100) * maxRadius;
-    return `${center + Math.cos(angle) * radius},${center + Math.sin(angle) * radius}`;
-  });
-
-  const grid = [0.33, 0.66, 1].map((scale) =>
-    dimensions
-      .map((_, index) => {
-        const angle = -Math.PI / 2 + angleStep * index;
-        return `${center + Math.cos(angle) * maxRadius * scale},${center + Math.sin(angle) * maxRadius * scale}`;
-      })
-      .join(" ")
-  );
-
-  return (
-    <div className="radar-wrap">
-      <svg viewBox={`0 0 ${size} ${size}`} role="img" aria-label="七维口语评分雷达图">
-        {grid.map((polygon) => (
-          <polygon className="radar-grid" key={polygon} points={polygon} />
-        ))}
-        {dimensions.map((dimension, index) => {
-          const angle = -Math.PI / 2 + angleStep * index;
-          const x = center + Math.cos(angle) * (maxRadius + 26);
-          const y = center + Math.sin(angle) * (maxRadius + 26);
-          return (
-            <g key={dimension.id}>
-              <line
-                className="radar-axis"
-                x1={center}
-                y1={center}
-                x2={center + Math.cos(angle) * maxRadius}
-                y2={center + Math.sin(angle) * maxRadius}
-              />
-              <text x={x} y={y} textAnchor="middle" dominantBaseline="middle">
-                {dimension.labelZh.replace("度", "")}
-              </text>
-            </g>
-          );
-        })}
-        <polygon className="radar-score" points={points.join(" ")} />
-      </svg>
-    </div>
-  );
-}
-
-function ConversationLog({ turns }: { turns: ConversationTurn[] }) {
-  if (turns.length === 0) {
-    return <p className="muted">本次报告暂无对话记录。</p>;
-  }
-
-  return (
-    <div className="conversation-log">
-      {turns.map((turn) => (
-        <article className={`conversation-row ${turn.speaker}`} key={turn.id}>
-          <span>{turn.speaker === "ai" ? "AI" : turn.speaker === "user" ? "You" : "System"}</span>
-          <p>{turn.text}</p>
-          <small>{new Date(turn.timestamp).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</small>
-        </article>
-      ))}
-    </div>
-  );
 }
 
 function createJourneySteps({

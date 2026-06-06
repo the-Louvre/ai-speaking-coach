@@ -70,6 +70,40 @@ export const correctionSchema = z.object({
   explanationZh: z.string()
 });
 
+export const sentenceHighlightSchema = z.object({
+  originalText: z.string(),
+  improvedText: z.string(),
+  reasonZh: z.string()
+});
+
+export const sentenceAnalysisSchema = z.object({
+  original: z.string(),
+  improved: z.string(),
+  issueType: z.enum(["grammar", "wording", "logic", "pronunciation"]),
+  explanationZh: z.string(),
+  highlights: z.array(sentenceHighlightSchema)
+});
+
+export const pronunciationTipSchema = z.object({
+  wordOrPhrase: z.string(),
+  issueZh: z.string(),
+  tipZh: z.string(),
+  example: z.string()
+});
+
+export const evidenceTurnSchema = z.object({
+  speaker: z.literal("user"),
+  text: z.string(),
+  reasonZh: z.string()
+});
+
+export const nextPracticeSchema = z.object({
+  goalZh: z.string(),
+  targetSentence: z.string(),
+  chunks: z.array(z.string()),
+  drills: z.array(z.string())
+});
+
 export const reportResultSchema = z.object({
   reportId: z.string(),
   totalScore: z.number(),
@@ -79,7 +113,11 @@ export const reportResultSchema = z.object({
   suggestions: z.array(z.string()),
   coachCommentZh: z.string(),
   provider: z.string(),
-  fallback: z.boolean().optional()
+  fallback: z.boolean().optional(),
+  sentenceAnalyses: z.array(sentenceAnalysisSchema).optional(),
+  pronunciationTips: z.array(pronunciationTipSchema).optional(),
+  evidenceTurns: z.array(evidenceTurnSchema).optional(),
+  nextPractice: nextPracticeSchema.optional()
 });
 
 export const conversationTurnSchema = z.object({
@@ -114,6 +152,10 @@ export type TranscriptResult = z.infer<typeof transcriptResultSchema>;
 export type DialogueTurnResult = z.infer<typeof dialogueTurnResultSchema>;
 export type SpeechAudioResult = z.infer<typeof speechAudioResultSchema>;
 export type ReportResult = z.infer<typeof reportResultSchema>;
+export type SentenceAnalysis = z.infer<typeof sentenceAnalysisSchema>;
+export type PronunciationTip = z.infer<typeof pronunciationTipSchema>;
+export type EvidenceTurn = z.infer<typeof evidenceTurnSchema>;
+export type NextPractice = z.infer<typeof nextPracticeSchema>;
 export type ConversationTurn = z.infer<typeof conversationTurnSchema>;
 export type PracticeSession = z.infer<typeof practiceSessionSchema>;
 export type PracticeSessionStatus = z.infer<typeof practiceSessionStatusSchema>;

@@ -191,5 +191,9 @@ describe("local API in mock mode", () => {
       "interaction"
     ]);
     expect(parsed.corrections[0].explanationZh).toContain("时态");
+    expect(parsed.sentenceAnalyses?.[0].highlights[0].reasonZh).toBeTruthy();
+    expect(parsed.pronunciationTips?.[0].wordOrPhrase).toBeTruthy();
+    expect(parsed.evidenceTurns?.[0].speaker).toBe("user");
+    expect(parsed.nextPractice?.targetSentence).toContain("project");
   });
 });

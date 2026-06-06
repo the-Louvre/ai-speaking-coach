@@ -166,6 +166,90 @@ export function mockReport(): ReportResult {
       "回答追问时先短答，再补背景。"
     ],
     coachCommentZh: "语法还算稳，但表达太泛。下一轮加一个具体数字。",
+    sentenceAnalyses: [
+      {
+        original: "My role is about to improve the model and the UI style.",
+        improved: "My role was to improve the model behavior and polish the UI.",
+        issueType: "wording",
+        explanationZh: "复盘项目经历时要用清晰的职责表达；about to 表示“即将要做”，不适合说明过去项目中的职责。",
+        highlights: [
+          {
+            originalText: "about to",
+            improvedText: "was to",
+            reasonZh: "职责表达应使用 was to，语义比 about to 更准确。"
+          },
+          {
+            originalText: "the UI style",
+            improvedText: "polish the UI",
+            reasonZh: "polish the UI 更像项目职责表达，也更自然。"
+          }
+        ]
+      },
+      {
+        original: "I built campus navigation app. It make route clear.",
+        improved: "I built a campus navigation app that made route planning clearer.",
+        issueType: "grammar",
+        explanationZh: "项目复盘要保持过去时，并补上冠词，让句子听起来完整。",
+        highlights: [
+          {
+            originalText: "campus navigation app",
+            improvedText: "a campus navigation app",
+            reasonZh: "可数名词 app 前需要冠词 a。"
+          },
+          {
+            originalText: "It make",
+            improvedText: "that made",
+            reasonZh: "过去项目结果应使用过去式 made，并用 that 衔接更自然。"
+          }
+        ]
+      }
+    ],
+    pronunciationTips: [
+      {
+        wordOrPhrase: "project",
+        issueZh: "名词 project 的重音容易放错。",
+        tipZh: "说项目名词时重音放在前半段：PRO-ject，后半段轻一点。",
+        example: "My PRO-ject improved route planning."
+      },
+      {
+        wordOrPhrase: "model and the UI",
+        issueZh: "and 可以弱读，但不要完全吞掉，否则转写会断开。",
+        tipZh: "把 model and the UI 连成一组读，and 弱读成 /ənd/ 或 /ən/。",
+        example: "I improved the model and the UI."
+      },
+      {
+        wordOrPhrase: "result sentence",
+        issueZh: "说结果句时句尾语调要下落，听起来更确定。",
+        tipZh: "在数字或结果短语后稍微停顿，并让句尾下落。",
+        example: "It reduced planning time by 30%."
+      }
+    ],
+    evidenceTurns: [
+      {
+        speaker: "user",
+        text: "My role is about to improve the model and the UI style.",
+        reasonZh: "这句话能看出职责表达不够自然，是本次最有价值的纠错证据。"
+      },
+      {
+        speaker: "user",
+        text: "I built campus navigation app. It make route clear.",
+        reasonZh: "这句话暴露了冠词和时态问题，也说明结果表达还缺少量化。"
+      }
+    ],
+    nextPractice: {
+      goalZh: "用一句英文先说项目结果，再补一个数字。",
+      targetSentence: "My project improved route planning by 30% by making the model responses clearer.",
+      chunks: [
+        "My project improved route planning",
+        "by 30%",
+        "by making the model responses clearer"
+      ],
+      drills: [
+        "先慢读三段 chunk，每段之间停半秒。",
+        "第二遍把 by 30% 单独加重音。",
+        "第三遍连成一句，句尾语调下落。"
+      ]
+    },
     provider: "mock",
     fallback: true
   };

@@ -517,6 +517,99 @@ function extractQwenAudioBase64(payloads: unknown[]): string | null {
   return chunks.length ? Buffer.concat(chunks).toString("base64") : null;
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value ? (value as Record<string, unknown>) : {};
+}
+
+function readText(value: unknown): string {
+  return typeof value === "string" ? value : value == null ? "" : String(value);
+}
+
+function readStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
+}
+
+function normalizeSentenceAnalyses(value: unknown) {
+  if (!Array.isArray(value)) return undefined;
+  const analyses = value
+    .map((analysis) => {
+      const item = asRecord(analysis);
+      const issueType = readText(item.issueType || item.type);
+      const highlightsRaw = Array.isArray(item.highlights) ? item.highlights : [];
+      const highlights = highlightsRaw
+        .map((highlight) => {
+          const mark = asRecord(highlight);
+          return {
+            originalText: readText(mark.originalText || mark.original || mark.from),
+            improvedText: readText(mark.improvedText || mark.improved || mark.to),
+            reasonZh: readText(mark.reasonZh || mark.reason || mark.explanationZh)
+          };
+        })
+        .filter((highlight) => highlight.originalText || highlight.improvedText || highlight.reasonZh);
+
+      return {
+        original: readText(item.original || item.originalText),
+        improved: readText(item.improved || item.improvedText || item.better),
+        issueType: ["grammar", "wording", "logic", "pronunciation"].includes(issueType)
+          ? issueType
+          : "wording",
+        explanationZh: readText(item.explanationZh || item.explanation || item.reason),
+        highlights
+      };
+    })
+    .filter((analysis) => analysis.original || analysis.improved);
+
+  return analyses.length ? analyses : undefined;
+}
+
+function normalizePronunciationTips(value: unknown) {
+  if (!Array.isArray(value)) return undefined;
+  const tips = value
+    .map((tip) => {
+      const item = asRecord(tip);
+      return {
+        wordOrPhrase: readText(item.wordOrPhrase || item.word || item.phrase),
+        issueZh: readText(item.issueZh || item.issue),
+        tipZh: readText(item.tipZh || item.tip || item.adviceZh),
+        example: readText(item.example || item.sentence)
+      };
+    })
+    .filter((tip) => tip.wordOrPhrase || tip.tipZh);
+
+  return tips.length ? tips : undefined;
+}
+
+function normalizeEvidenceTurns(value: unknown) {
+  if (!Array.isArray(value)) return undefined;
+  const turns = value
+    .map((turn) => {
+      const item = asRecord(turn);
+      return {
+        speaker: "user" as const,
+        text: readText(item.text || item.userText || item.original),
+        reasonZh: readText(item.reasonZh || item.reason || item.explanationZh)
+      };
+    })
+    .filter((turn) => turn.text);
+
+  return turns.length ? turns : undefined;
+}
+
+function normalizeNextPractice(value: unknown) {
+  const item = asRecord(value);
+  const targetSentence = readText(item.targetSentence || item.sentence || item.example);
+  if (!targetSentence && !item.goalZh) return undefined;
+
+  const chunks = readStringArray(item.chunks);
+  const drills = readStringArray(item.drills || item.steps);
+  return {
+    goalZh: readText(item.goalZh || item.goal || "用更自然的一句话复述本次项目结果。"),
+    targetSentence,
+    chunks: chunks.length ? chunks : targetSentence.split(/\s+(?=by|and|that|with)/).filter(Boolean),
+    drills: drills.length ? drills : ["先分块慢读，再连成一句。", "把结果数字读重一点。"]
+  };
+}
+
 function normalizeReportJson(json: unknown, provider: string): Record<string, unknown> {
   const raw = json as Record<string, unknown>;
   const dimensionsRaw = raw.dimensions;
@@ -571,6 +664,10 @@ function normalizeReportJson(json: unknown, provider: string): Record<string, un
     suggestions: Array.isArray(raw.suggestions) ? raw.suggestions.map(String) : [],
     coachCommentZh:
       typeof raw.coachCommentZh === "string" ? raw.coachCommentZh : String(raw.coachComment ?? raw.summaryZh ?? ""),
+    sentenceAnalyses: normalizeSentenceAnalyses(raw.sentenceAnalyses || raw.sentenceAnalysis),
+    pronunciationTips: normalizePronunciationTips(raw.pronunciationTips || raw.pronunciation),
+    evidenceTurns: normalizeEvidenceTurns(raw.evidenceTurns || raw.evidence),
+    nextPractice: normalizeNextPractice(raw.nextPractice || raw.drill || raw.recommendedPractice),
     provider
   };
 }
@@ -643,7 +740,12 @@ export async function generateReportWithLlm(
       [
         "Generate a Chinese-first English speaking practice report.",
         "Return one strict JSON object only. Do not include Markdown.",
-        "The JSON keys must be reportId, totalScore, dimensions, summaryZh, corrections, suggestions, coachCommentZh, provider.",
+        "The required JSON keys are reportId, totalScore, dimensions, summaryZh, corrections, suggestions, coachCommentZh, provider.",
+        "Also include optional keys when possible: sentenceAnalyses, pronunciationTips, evidenceTurns, nextPractice.",
+        "sentenceAnalyses must include 1-3 concrete user sentence fixes with phrase-level highlights.",
+        "pronunciationTips must include words or phrases from the transcript with Chinese coaching tips.",
+        "evidenceTurns must quote only user turns that justify the feedback.",
+        "nextPractice must provide one immediately repeatable target sentence, chunks, and drills.",
         "dimensions must include fluency, pronunciation, grammar, vocabulary, coherence, task_completion, interaction.",
         "Score the whole conversation, not a single isolated answer.",
         `provider must be ${config.llmProvider}.`
