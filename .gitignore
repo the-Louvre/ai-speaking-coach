@@ -30,6 +30,8 @@ coverage/
 # Runtime/cache
 .cache/
 .codex/
+.agents/
+.claude/
 .turbo/
 .superpowers/
 __pycache__/
