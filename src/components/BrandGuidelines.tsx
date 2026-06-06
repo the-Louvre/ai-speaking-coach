@@ -45,57 +45,52 @@ export function BrandTopBar() {
   );
 }
 
-export function GuideCardGrid({
-  onStartPractice
-}: {
-  onStartPractice: () => void;
-}) {
+export function GuideCardGrid() {
   const cards: GuideCardConfig[] = [
     {
-      id: "practice",
-      title: "scenes",
-      description: "支持面试、点餐、会议和自定义场景，先定目标再进入真实对话。",
-      cta: "PICK SCENE",
+      id: "identity",
+      title: "identity",
+      description: "Successfully represent the brand with core visual elements and rules for usage.",
+      cta: "VIEW GUIDE",
       color: "var(--feather-green)",
-      variant: "practice",
-      onClick: onStartPractice
+      variant: "practice"
     },
     {
-      id: "speech",
-      title: "voice",
-      description: "ASR -> LLM -> TTS 串成端到端语音链路，保留延迟和 fallback 状态。",
-      cta: "VOICE FLOW",
+      id: "writing",
+      title: "writing",
+      description: "Produce content in the spirit of the brand and ensure consistency across all mediums.",
+      cta: "VIEW GUIDE",
       color: "var(--macaw)",
       variant: "speech"
     },
     {
-      id: "coach",
-      title: "coach",
-      description: "虚拟教练按倾听、思考、追问、评价切状态，让多轮对话更自然。",
-      cta: "MEET COACH",
+      id: "illustration",
+      title: "illustration",
+      description: "Create artwork that feels right at home in the expanding language-learning universe.",
+      cta: "VIEW GUIDE",
       color: "var(--purple)",
       variant: "coach"
     },
     {
-      id: "feedback",
-      title: "feedback",
-      description: "用转写置信度、低置信词和 rubric 聚合发音评测、语法和表达纠错。",
-      cta: "CHECK GROWTH",
+      id: "marketing",
+      title: "marketing",
+      description: "Create materials using all the critical elements of the visual identity.",
+      cta: "VIEW GUIDE",
       color: "var(--bee)",
       variant: "streak"
     },
     {
-      id: "report",
-      title: "summary",
-      description: "课后报告沉淀五维评分、逐句纠错、推荐表达和下一轮学习目标。",
-      cta: "VIEW REPORT",
+      id: "resources",
+      title: "resources",
+      description: "Logos, fact sheets, images, and all the other downloadables you need.",
+      cta: "VIEW ASSETS",
       color: "var(--coral)",
       variant: "report"
     }
   ];
 
   return (
-    <section className="guide-card-grid" aria-label="口语陪练功能导航">
+    <section className="guide-card-grid" aria-label="Brand guideline sections">
       {cards.map((card) => (
         <GuideCard key={card.id} card={card} />
       ))}
@@ -267,7 +262,7 @@ function LogoGuidelines() {
     <section className="brand-section logo-guidelines">
       <div>
         <p className="section-label">Logo Usage</p>
-        <h2>Keep the coach unmistakable</h2>
+        <h2>Keep the wordmark confident</h2>
         <p>
           Clear space keeps the wordmark confident. Use consistent spacing, alignment, and scale relationships to keep
           the brand recognizable across every surface.

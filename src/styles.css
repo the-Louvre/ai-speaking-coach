@@ -16,6 +16,17 @@
   --panel-bg: #f7f7f7;
   --ink-shadow: 0 3px 0 rgba(0, 0, 0, 0.06);
   --soft-shadow: 0 12px 30px rgba(75, 75, 75, 0.08);
+  --coach-skin: #f7ddcf;
+  --coach-skin-shadow: #efcdbf;
+  --coach-brow: #ed9a84;
+  --coach-nose: #f1a792;
+  --coach-hair: #eef1f0;
+  --coach-hair-shadow: #dfe5e4;
+  --coach-glasses: #333536;
+  --coach-eye: #2e9294;
+  --coach-gold: #f5cd32;
+  --coach-body: #373938;
+  --coach-motion: cubic-bezier(0.32, 0.72, 0, 1);
   color: var(--eel);
   background: var(--snow);
   font-family:
@@ -404,59 +415,311 @@
   }
 }
 
-/* Mascot avatar animation */
-.mascot {
-  display: inline-block;
+/* Layered coach avatar animation */
+.layered-coach-avatar {
+  display: inline-grid;
+  place-items: center;
+  overflow: visible;
 }
 
-.mascot-idle {
-  animation: mascot-bob 3.2s ease-in-out infinite;
+.layered-coach-avatar svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
 
-.mascot-asking {
-  animation: mascot-bob 1.4s ease-in-out infinite;
+.layered-coach-avatar .coach-rig {
+  transform-box: fill-box;
+  transform-origin: 50% 74%;
+  animation: layered-coach-idle 5.6s var(--coach-motion) infinite;
 }
 
-.mascot-listening {
-  animation: mascot-lean 2s ease-in-out infinite;
+.layered-coach-listening .coach-rig {
+  animation: layered-coach-listening 2.8s var(--coach-motion) infinite;
 }
 
-.mascot-thinking {
-  animation: mascot-tilt 2.4s ease-in-out infinite;
+.layered-coach-thinking .coach-rig {
+  animation: layered-coach-thinking 3.4s var(--coach-motion) infinite;
 }
 
-@keyframes mascot-bob {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-6px);
-  }
+.layered-coach-asking .coach-rig {
+  animation: layered-coach-speaking 1.8s var(--coach-motion) infinite;
 }
 
-@keyframes mascot-lean {
-  0%,
-  100% {
-    transform: translateY(0) scale(1);
-  }
-  50% {
-    transform: translateY(-3px) scale(1.03);
-  }
+.layered-coach-reviewing .coach-rig {
+  animation: layered-coach-reviewing 2.2s var(--coach-motion) infinite;
 }
 
-@keyframes mascot-tilt {
-  0%,
-  100% {
-    transform: rotate(-3deg);
-  }
-  50% {
-    transform: rotate(3deg);
-  }
+.layered-coach-celebrating .coach-rig {
+  animation: layered-coach-celebrating 1.7s var(--coach-motion) infinite;
+}
+
+.layered-coach-avatar .hair-front,
+.layered-coach-avatar .glasses,
+.layered-coach-avatar .earring-left,
+.layered-coach-avatar .earring-right,
+.layered-coach-avatar .eye-left,
+.layered-coach-avatar .eye-right,
+.layered-coach-avatar .brow-left,
+.layered-coach-avatar .brow-right,
+.layered-coach-avatar .mouth-smirk,
+.layered-coach-avatar .mouth-open,
+.layered-coach-avatar .mouth-correct,
+.layered-coach-avatar .state-aura,
+.layered-coach-avatar .thinking-dots,
+.layered-coach-avatar .speech-lines,
+.layered-coach-avatar .correction-mark,
+.layered-coach-avatar .celebration-rays {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+}
+
+.layered-coach-avatar .hair-front {
+  animation: layered-coach-hair 6.2s var(--coach-motion) infinite;
+}
+
+.layered-coach-avatar .glasses {
+  animation: layered-coach-glasses 5.6s var(--coach-motion) infinite;
+}
+
+.layered-coach-avatar .earring-left,
+.layered-coach-avatar .earring-right {
+  transform-origin: 50% 8%;
+  animation: layered-coach-earring 5.8s var(--coach-motion) infinite;
+}
+
+.layered-coach-avatar .earring-right {
+  animation-delay: 420ms;
+}
+
+.layered-coach-avatar .eyelid-left,
+.layered-coach-avatar .eyelid-right {
+  transform-box: fill-box;
+  transform-origin: 50% 0%;
+  animation: layered-coach-blink 6.4s steps(1, end) infinite;
+}
+
+.layered-coach-avatar .mouth-smirk {
+  animation: layered-coach-smirk 5.8s var(--coach-motion) infinite;
+}
+
+.layered-coach-avatar .state-aura,
+.layered-coach-avatar .thinking-dots,
+.layered-coach-avatar .speech-lines,
+.layered-coach-avatar .correction-mark,
+.layered-coach-avatar .celebration-rays,
+.layered-coach-avatar .mouth-open,
+.layered-coach-avatar .mouth-correct {
+  opacity: 0;
+}
+
+.layered-coach-listening .state-aura {
+  opacity: 1;
+  animation: layered-coach-aura 1.8s var(--coach-motion) infinite;
+}
+
+.layered-coach-listening .eye-left,
+.layered-coach-listening .eye-right {
+  animation: layered-coach-eyes-listen 2.1s var(--coach-motion) infinite;
+}
+
+.layered-coach-thinking .thinking-dots {
+  opacity: 1;
+}
+
+.layered-coach-thinking .thinking-dots circle {
+  animation: layered-coach-dot 1.35s var(--coach-motion) infinite;
+}
+
+.layered-coach-thinking .thinking-dots circle:nth-child(2) {
+  animation-delay: 130ms;
+}
+
+.layered-coach-thinking .thinking-dots circle:nth-child(3) {
+  animation-delay: 260ms;
+}
+
+.layered-coach-thinking .eye-left,
+.layered-coach-thinking .eye-right {
+  animation: layered-coach-eyes-think 3.4s var(--coach-motion) infinite;
+}
+
+.layered-coach-asking .speech-lines {
+  opacity: 1;
+}
+
+.layered-coach-asking .speech-lines path {
+  animation: layered-coach-speech-line 900ms var(--coach-motion) infinite;
+}
+
+.layered-coach-asking .speech-lines path:nth-child(2) {
+  animation-delay: 120ms;
+}
+
+.layered-coach-asking .speech-lines path:nth-child(3) {
+  animation-delay: 240ms;
+}
+
+.layered-coach-asking .mouth-smirk,
+.layered-coach-reviewing .mouth-smirk {
+  opacity: 0;
+}
+
+.layered-coach-asking .mouth-open {
+  opacity: 1;
+  animation: layered-coach-mouth-talk 560ms steps(3, end) infinite;
+}
+
+.layered-coach-asking .brow-left,
+.layered-coach-asking .brow-right {
+  animation: layered-coach-brow-ask 1.4s var(--coach-motion) infinite;
+}
+
+.layered-coach-reviewing .mouth-correct,
+.layered-coach-reviewing .correction-mark {
+  opacity: 1;
+}
+
+.layered-coach-reviewing .correction-mark {
+  animation: layered-coach-correction 1.4s var(--coach-motion) infinite;
+}
+
+.layered-coach-reviewing .brow-left,
+.layered-coach-reviewing .brow-right {
+  animation: layered-coach-brow-correct 1.8s var(--coach-motion) infinite;
+}
+
+.layered-coach-celebrating .celebration-rays {
+  opacity: 1;
+}
+
+.layered-coach-celebrating .celebration-rays path,
+.layered-coach-celebrating .celebration-rays circle {
+  animation: layered-coach-ray 1.2s var(--coach-motion) infinite;
+}
+
+.layered-coach-celebrating .celebration-rays path:nth-child(2) {
+  animation-delay: 100ms;
+}
+
+.layered-coach-celebrating .celebration-rays path:nth-child(3) {
+  animation-delay: 180ms;
+}
+
+.layered-coach-celebrating .celebration-rays path:nth-child(4) {
+  animation-delay: 260ms;
+}
+
+@keyframes layered-coach-idle {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-8px) scale(1.006); }
+}
+
+@keyframes layered-coach-listening {
+  0%, 100% { transform: translateY(-2px) scale(1.008); }
+  50% { transform: translateY(-11px) scale(1.012); }
+}
+
+@keyframes layered-coach-thinking {
+  0%, 100% { transform: translateY(-5px) rotate(0deg); }
+  50% { transform: translateY(-8px) rotate(-1.2deg); }
+}
+
+@keyframes layered-coach-speaking {
+  0%, 100% { transform: translateY(-4px) scale(1.008); }
+  50% { transform: translateY(-10px) scale(1.016); }
+}
+
+@keyframes layered-coach-reviewing {
+  0%, 100% { transform: translateY(-4px) rotate(0deg); }
+  45% { transform: translateY(-1px) rotate(0.8deg); }
+  70% { transform: translateY(-7px) rotate(-0.4deg); }
+}
+
+@keyframes layered-coach-celebrating {
+  0%, 100% { transform: translateY(-7px) scale(1.012); }
+  45% { transform: translateY(-18px) scale(1.026); }
+}
+
+@keyframes layered-coach-hair {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes layered-coach-glasses {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-1.5px) rotate(-0.15deg); }
+}
+
+@keyframes layered-coach-earring {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(3.2deg); }
+}
+
+@keyframes layered-coach-blink {
+  0%, 91%, 100% { transform: scaleY(0); }
+  92%, 94% { transform: scaleY(1); }
+}
+
+@keyframes layered-coach-smirk {
+  0%, 100% { transform: translateY(0) scaleX(1); }
+  50% { transform: translateY(-1px) scaleX(1.035); }
+}
+
+@keyframes layered-coach-aura {
+  0%, 100% { transform: scale(0.96); opacity: 0.2; }
+  50% { transform: scale(1.04); opacity: 0.72; }
+}
+
+@keyframes layered-coach-eyes-listen {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  50% { transform: translateY(-2px) scaleY(0.94); }
+}
+
+@keyframes layered-coach-eyes-think {
+  0%, 100% { transform: translate(0, 0); }
+  45%, 70% { transform: translate(5px, -5px); }
+}
+
+@keyframes layered-coach-dot {
+  0%, 100% { transform: translateY(0); opacity: 0.28; }
+  50% { transform: translateY(-8px); opacity: 1; }
+}
+
+@keyframes layered-coach-speech-line {
+  0%, 100% { transform: translateX(0) scaleX(0.82); opacity: 0.2; }
+  50% { transform: translateX(9px) scaleX(1); opacity: 0.9; }
+}
+
+@keyframes layered-coach-mouth-talk {
+  0%, 100% { transform: scaleY(0.6) scaleX(0.92); }
+  50% { transform: scaleY(1.22) scaleX(1.08); }
+}
+
+@keyframes layered-coach-brow-ask {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes layered-coach-brow-correct {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(2px) rotate(-1.2deg); }
+}
+
+@keyframes layered-coach-correction {
+  0%, 100% { transform: translateY(0) scale(0.96); opacity: 0.42; }
+  50% { transform: translateY(-7px) scale(1.04); opacity: 1; }
+}
+
+@keyframes layered-coach-ray {
+  0%, 100% { transform: translateY(0) scale(0.92); opacity: 0.25; }
+  50% { transform: translateY(-9px) scale(1.08); opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .mascot {
+  .layered-coach-avatar *,
+  .layered-coach-avatar {
     animation: none !important;
   }
 }
@@ -2512,7 +2775,18 @@ textarea:focus,
 }
 
 .home-coach .coach-stage {
-  width: min(100%, 280px);
+  width: min(100%, 310px);
+  min-height: 300px;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.home-coach .coach-status {
+  right: 28px;
+  bottom: 10px;
+  left: 28px;
 }
 
 .home-growth .pill {
