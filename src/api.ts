@@ -166,6 +166,26 @@ export const api = {
     })
 };
 
+export async function checkPipecatHealth() {
+  const baseUrl = import.meta.env.VITE_PIPECAT_BASE_URL || "http://127.0.0.1:7860";
+  const response = await fetch(new URL("/health", baseUrl));
+  if (!response.ok) {
+    throw new Error(`Pipecat health check failed: ${response.status} ${response.statusText}`);
+  }
+  const health = (await response.json()) as {
+    configured?: Partial<Record<"assemblyai" | "llm" | "cartesia" | "businessApi", boolean>>;
+    ready?: boolean;
+    service?: string;
+  };
+  const missingVoiceProviders = ["assemblyai", "llm", "cartesia"].filter(
+    (provider) => health.configured?.[provider as "assemblyai" | "llm" | "cartesia"] === false
+  );
+  if (missingVoiceProviders.length > 0) {
+    throw new Error(`voice provider is not configured: ${missingVoiceProviders.join(", ")}`);
+  }
+  return health;
+}
+
 export function createPipecatOfferUrl(params: {
   sessionId: string;
   scenarioId: string;

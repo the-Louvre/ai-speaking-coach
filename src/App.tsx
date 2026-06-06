@@ -15,7 +15,7 @@ import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CoachState, ConversationTurn, PracticeSession, ReportResult } from "../shared/schemas";
 import type { Scenario } from "../server/data";
-import { api, createPipecatOfferUrl, type HealthResult } from "./api";
+import { api, checkPipecatHealth, createPipecatOfferUrl, type HealthResult } from "./api";
 import { ApiSettingsPanel } from "./components/ApiSettingsPanel";
 import { BrandTopBar } from "./components/BrandGuidelines";
 import { CoachAvatar } from "./components/CoachAvatar";
@@ -37,9 +37,14 @@ import {
   type LearningState
 } from "./domain/learning";
 import { createPipecatVoiceClient, type PipecatVoiceClient, type PipecatVoiceTurn } from "./pipecatVoiceClient";
+import {
+  getPracticeExperienceCopy,
+  mapPracticeStartError,
+  practiceStatusLabel,
+  type PracticeStatus
+} from "./practiceExperience";
 
 type Screen = "home" | "prep" | "practice" | "report";
-type PracticeStatus = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "ended" | "completed";
 type JourneyStatus = "done" | "active" | "waiting";
 type JourneyStep = {
   label: string;
@@ -94,7 +99,6 @@ export default function App() {
   const [coachState, setCoachState] = useState<CoachState>("idle");
   const [conversationTurns, setConversationTurns] = useState<ConversationTurn[]>([]);
   const [latestAiText, setLatestAiText] = useState("");
-  const [latestHint, setLatestHint] = useState("");
   const [report, setReport] = useState<ReportResult | null>(null);
   const [checkin, setCheckin] = useState<CheckinState>(() => loadCheckin());
   const [learning, setLearning] = useState<LearningState>(() => loadLearning());
@@ -110,6 +114,10 @@ export default function App() {
   const learningSummary = useMemo(() => summarizeLearning(learning), [learning]);
   const latestLearningRecord = learning.records[0] ?? null;
   const userTurnCount = conversationTurns.filter((turn) => turn.speaker === "user").length;
+  const practiceCopy = useMemo(
+    () => getPracticeExperienceCopy({ status: practiceStatus, busy, error: startError }),
+    [busy, practiceStatus, startError]
+  );
   const journeySteps = useMemo(
     () =>
       createJourneySteps({
@@ -180,19 +188,30 @@ export default function App() {
       return;
     }
     if (status === "bot-speaking") {
+      setBusy("");
       setPracticeStatus("speaking");
       setCoachState("asking");
       return;
     }
     if (status === "user-speaking" || status === "ready" || status === "bot-ready" || status === "connected") {
+      setBusy("");
       setPracticeStatus("listening");
       setCoachState("listening");
     }
   }
 
+  function createTurnKey(speaker: ConversationTurn["speaker"], text: string) {
+    return `${speaker}:${text.replace(/\s+/g, " ").trim()}`;
+  }
+
+  function seedRecordedTurnKeys(turns: ConversationTurn[]) {
+    recordedTurnKeysRef.current = new Set(turns.map((turn) => createTurnKey(turn.speaker, turn.text)));
+  }
+
   function dedupeVoiceTurn(turn: PipecatVoiceTurn) {
     const normalizedText = turn.text.replace(/\s+/g, " ").trim();
-    const key = `${turn.speaker}:${normalizedText}`;
+    if (!normalizedText) return true;
+    const key = createTurnKey(turn.speaker, normalizedText);
     if (recordedTurnKeysRef.current.has(key)) return true;
     recordedTurnKeysRef.current.add(key);
     return false;
@@ -218,10 +237,10 @@ export default function App() {
   }
 
   async function startConversation() {
-    setBusy("连接 Pipecat Voice Agent");
+    setBusy("Checking voice service");
     setStartError("");
-    setLatestHint("");
     setConversationTurns([]);
+    setLatestAiText("");
     setPracticeSession(null);
     setReport(null);
     setPracticeStatus("connecting");
@@ -230,6 +249,8 @@ export default function App() {
 
     try {
       await voiceClientRef.current?.disconnect();
+      await checkPipecatHealth();
+      setBusy("Opening live voice connection");
       const started = await api.startSession(
         scenario.id,
         task.id,
@@ -238,6 +259,7 @@ export default function App() {
       );
       setPracticeSession(started.session);
       setConversationTurns(started.session.conversation_turns);
+      seedRecordedTurnKeys(started.session.conversation_turns);
       setLatestAiText(started.aiText);
       setRemainingSeconds(started.remainingSeconds);
       startCountdown(started.remainingSeconds, started.sessionId);
@@ -257,10 +279,10 @@ export default function App() {
             });
           },
           onError: (message) => {
-            setStartError(message);
+            setStartError(mapPracticeStartError(new Error(message)));
             setBusy("");
-            setPracticeStatus("idle");
-            setCoachState("idle");
+            setPracticeStatus((current) => (current === "connecting" ? "idle" : current));
+            setCoachState((current) => (current === "thinking" ? "idle" : current));
           },
           onDisconnected: () => {
             setBusy("");
@@ -271,6 +293,7 @@ export default function App() {
       });
       voiceClientRef.current = client;
       await client.connect();
+      if (voiceClientRef.current !== client) return;
       setBusy("");
       setPracticeStatus("listening");
       setCoachState("listening");
@@ -281,11 +304,7 @@ export default function App() {
       voiceClientRef.current = null;
       setPracticeStatus("idle");
       setCoachState("idle");
-      setStartError(
-        error instanceof Error
-          ? error.message
-          : "Pipecat Voice Agent 连接失败，请确认 Python 服务运行在 127.0.0.1:7860。"
-      );
+      setStartError(mapPracticeStartError(error));
     }
   }
 
@@ -586,18 +605,19 @@ export default function App() {
           <span className="practice-chip goal">🎯 {task.focus}</span>
         </div>
         <section className="practice-grid">
-          <div className="stage dialogue-room">
-            <div className="stage-q">{latestAiText || "点击开始训练，Pipecat 会接管实时语音陪练。"}</div>
-            <div className="stage-mascot">
-              <CoachAvatar state={coachState} size={150} />
+          <div className={`stage dialogue-room practice-${practiceStatus}`}>
+            <div className="coach-focus">
+              <div className="coach-prompt">
+                {latestAiText || "Click Start Training and your coach will begin the conversation."}
+              </div>
+              <div className="coach-avatar-wrap">
+                <CoachAvatar state={coachState} size={230} />
+              </div>
+              <div className={`coach-state-panel ${startError ? "error" : ""}`} aria-live="polite">
+                <span>{practiceCopy.headline}</span>
+                <p>{practiceCopy.helper}</p>
+              </div>
             </div>
-            <div className="mic-status">
-              <Headphones size={18} />
-              {practiceSession ? "Pipecat Voice Agent 已接管 VAD / STT / LLM / TTS" : "尚未开始训练"}
-            </div>
-            {(busy || latestHint || startError) && (
-              <div className={`round-tip ${startError ? "error" : ""}`}>{busy || startError || latestHint}</div>
-            )}
             <div className="voice-primary-controls" aria-label="实时训练控制">
               <button
                 className="primary wide"
@@ -624,14 +644,13 @@ export default function App() {
                 生成报告
               </button>
             </div>
-            <p className="muted stage-note">浏览器只负责 WebRTC 连接；VAD、转写、追问和播报由 Pipecat Voice Agent 处理。</p>
           </div>
 
           <aside className="practice-side voice-log-side" aria-label="实时对话记录">
             <span className="eyebrow">实时对话记录</span>
             <div className="caption-stream voice-only-log">
               {conversationTurns.length === 0 ? (
-                <div className="caption-line system">开始训练后，用户和 AI 的每句话会实时写入这里。</div>
+                <div className="caption-line system">Start training and your complete conversation will appear here.</div>
               ) : (
                 conversationTurns.map((turn) => (
                   <div className={`caption-line ${turn.speaker}`} key={turn.id}>
@@ -727,19 +746,6 @@ function formatSeconds(value: number) {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
-function practiceStatusLabel(status: PracticeStatus) {
-  const labels: Record<PracticeStatus, string> = {
-    idle: "待开始",
-    connecting: "连接中",
-    listening: "实时倾听",
-    thinking: "生成报告",
-    speaking: "AI 播报",
-    ended: "已结束，待报告",
-    completed: "已结束"
-  };
-  return labels[status];
-}
-
 function AbilityRadar({ dimensions }: { dimensions: ReportResult["dimensions"] }) {
   const size = 238;
   const center = size / 2;
@@ -831,13 +837,13 @@ function createJourneySteps({
     },
     {
       label: "实时语音对话",
-      detail: "Pipecat 接管 VAD、STT、LLM、TTS",
+      detail: "教练会听完你的回答后自然追问",
       status: hasReport || turnCount > 0 ? "done" : inPractice ? "active" : "waiting"
     },
     {
       label: "发音评测",
       detail: "整段对话进入课后七维评估",
-      status: hasReport || turnCount > 0 ? "done" : busy.includes("Pipecat") ? "active" : "waiting"
+      status: hasReport || turnCount > 0 ? "done" : busy.includes("voice") ? "active" : "waiting"
     },
     {
       label: "语法/表达纠错",

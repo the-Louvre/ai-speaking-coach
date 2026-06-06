@@ -2762,26 +2762,180 @@ textarea:focus,
 .stage.dialogue-room {
   display: grid;
   min-height: 620px;
-  grid-template-rows: auto minmax(180px, 1fr) minmax(170px, auto) auto auto;
+  grid-template-rows: minmax(0, 1fr) auto;
   align-items: center;
   justify-items: center;
-  gap: 18px;
-  padding: 28px;
+  gap: 22px;
+  padding: 30px;
   overflow: hidden;
 }
 
-.dialogue-room .stage-q {
-  width: min(720px, 100%);
-  margin: 0;
-  border-color: var(--mask-green);
-  color: var(--eel);
-  line-height: 1.35;
+.coach-focus {
+  display: grid;
+  width: min(760px, 100%);
+  min-height: 474px;
+  grid-template-rows: auto 1fr auto;
+  align-items: center;
+  justify-items: center;
+  gap: 18px;
 }
 
-.dialogue-room .stage-mascot {
-  display: flex;
-  width: min(360px, 82%);
-  min-height: 210px;
+.coach-prompt {
+  width: min(680px, 100%);
+  border: 2px solid var(--mask-green);
+  border-radius: 22px;
+  padding: 16px 22px;
+  background: var(--snow);
+  box-shadow: var(--ink-shadow);
+  color: var(--eel);
+  font-size: clamp(18px, 2.2vw, 26px);
+  font-weight: 950;
+  line-height: 1.32;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.coach-avatar-wrap {
+  position: relative;
+  display: grid;
+  width: min(320px, 100%);
+  min-height: 320px;
+  place-items: center;
+}
+
+.coach-avatar-wrap::before,
+.coach-avatar-wrap::after {
+  position: absolute;
+  content: "";
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.practice-listening .coach-avatar-wrap::before {
+  inset: 18px;
+  border: 3px solid rgba(28, 176, 246, 0.32);
+  animation: stage-listening 1.8s ease-out infinite;
+}
+
+.practice-speaking .coach-avatar-wrap::before {
+  inset: 12px;
+  border: 3px solid rgba(88, 204, 2, 0.34);
+  animation: stage-speaking 1.1s ease-in-out infinite;
+}
+
+.practice-connecting .coach-avatar-wrap::after,
+.practice-thinking .coach-avatar-wrap::after {
+  right: 26px;
+  bottom: 42px;
+  width: 44px;
+  height: 8px;
+  background: linear-gradient(90deg, var(--mask-green), var(--macaw), var(--bee));
+  animation: stage-thinking 1.2s ease-in-out infinite;
+}
+
+.coach-state-panel {
+  display: grid;
+  width: min(620px, 100%);
+  gap: 5px;
+  border: 2px solid var(--swan);
+  border-radius: 22px;
+  padding: 14px 18px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--ink-shadow);
+  color: var(--eel);
+  text-align: center;
+}
+
+.coach-state-panel span {
+  color: var(--wing-overlay);
+  font-size: clamp(18px, 2vw, 24px);
+  font-weight: 950;
+}
+
+.coach-state-panel p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--wolf);
+  font-size: 14px;
+  font-weight: 850;
+  line-height: 1.45;
+}
+
+.coach-state-panel.error {
+  border-color: #ff4b4b;
+  background: #fff0f0;
+}
+
+.coach-state-panel.error span,
+.coach-state-panel.error p {
+  color: #b83232;
+}
+
+.dialogue-room .coach-stage {
+  width: min(300px, 100%);
+}
+
+.dialogue-room .coach-status {
+  max-width: 90%;
+  text-align: center;
+}
+
+@keyframes stage-listening {
+  0% {
+    opacity: 0.68;
+    transform: scale(0.94);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.12);
+  }
+}
+
+@keyframes stage-speaking {
+  0%,
+  100% {
+    opacity: 0.38;
+    transform: scale(0.98);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.06);
+  }
+}
+
+@keyframes stage-thinking {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-5px);
+  }
+}
+
+.dialogue-room .stage-subtitle {
+  width: min(760px, 100%);
+  margin: 0;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.dialogue-room .voice-primary-controls {
+  align-self: end;
+}
+
+.voice-primary-controls {
+  display: grid;
+  width: min(760px, 100%);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.voice-primary-controls .wide {
+  width: 100%;
+  min-height: 50px;
   align-items: center;
   justify-content: center;
 }
@@ -2837,25 +2991,6 @@ textarea:focus,
   color: var(--wolf);
   font-weight: 800;
   text-align: center;
-}
-
-.dialogue-room .stage-subtitle {
-  width: min(760px, 100%);
-  margin: 0;
-  overflow-wrap: anywhere;
-  text-align: center;
-}
-
-.mic-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  border: 2px solid var(--swan);
-  border-radius: 999px;
-  padding: 9px 16px;
-  background: var(--snow);
-  color: var(--eel);
-  font-weight: 900;
 }
 
 .keyword-panel {
@@ -2916,19 +3051,6 @@ textarea:focus,
 .conversation-controls .wide {
   width: 100%;
   min-height: 48px;
-  justify-content: center;
-}
-
-.voice-primary-controls {
-  display: grid;
-  width: min(760px, 100%);
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.voice-primary-controls .wide {
-  width: 100%;
-  min-height: 50px;
   justify-content: center;
 }
 
@@ -3043,8 +3165,49 @@ button.danger {
 
 @media (max-width: 900px) {
   .stage.dialogue-room {
-    min-height: 560px;
-    padding: 20px;
+    min-height: 0;
+    gap: 16px;
+    padding: 18px;
+  }
+
+  .coach-focus {
+    min-height: 0;
+    gap: 14px;
+  }
+
+  .coach-prompt {
+    border-radius: 18px;
+    padding: 14px 16px;
+    font-size: 17px;
+  }
+
+  .coach-avatar-wrap {
+    width: min(270px, 100%);
+    min-height: 260px;
+  }
+
+  .dialogue-room .coach-stage {
+    width: min(250px, 100%);
+    min-height: 250px;
+  }
+
+  .practice-connecting .coach-avatar-wrap::after,
+  .practice-thinking .coach-avatar-wrap::after {
+    right: 24px;
+    bottom: 34px;
+  }
+
+  .coach-state-panel {
+    border-radius: 18px;
+    padding: 12px 14px;
+  }
+
+  .coach-state-panel span {
+    font-size: 18px;
+  }
+
+  .coach-state-panel p {
+    font-size: 13px;
   }
 
   .conversation-controls,

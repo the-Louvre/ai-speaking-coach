@@ -2,12 +2,12 @@ import type { CoachState } from "../../shared/schemas";
 import { MascotAvatar } from "./MascotAvatar";
 
 const STATUS_ZH: Record<CoachState, string> = {
-  idle: "待机陪练中",
+  idle: "准备陪你练",
   listening: "正在听你说",
-  thinking: "分析回答中",
-  asking: "准备追问",
-  reviewing: "生成课后点评",
-  celebrating: "今日已打卡"
+  thinking: "思考你的回答",
+  asking: "正在回应你",
+  reviewing: "整理练习报告",
+  celebrating: "报告已完成"
 };
 
 export function CoachAvatar({ state, size }: { state: CoachState; size?: number }) {

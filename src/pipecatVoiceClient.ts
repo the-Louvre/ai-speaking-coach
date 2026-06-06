@@ -72,7 +72,9 @@ export function createPipecatVoiceClient({
     if (track.kind !== "audio") return;
     botAudio.srcObject = new MediaStream([track]);
     void botAudio.play().catch(() => {
-      callbacks.onError("浏览器阻止了 AI 语音自动播放，请再点一次开始训练或检查浏览器声音权限。");
+      callbacks.onError(
+        "The browser blocked AI audio playback. Click Start Training again or check the speaker permission."
+      );
     });
   }
 
@@ -127,9 +129,12 @@ export function createPipecatVoiceClient({
       },
       onError: (message) => {
         const data = message.data as { message?: string } | undefined;
-        callbacks.onError(data?.message || "Pipecat Voice Agent 连接异常。");
+        callbacks.onError(
+          data?.message || "Voice service is not running. Start the Python service on 127.0.0.1:7860, then try again."
+        );
       },
-      onMessageError: () => callbacks.onError("Pipecat Voice Agent 消息处理失败。")
+      onMessageError: () =>
+        callbacks.onError("Voice connected, but AI audio is not playing yet. Check output device or restart training.")
     }
   });
 
