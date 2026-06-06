@@ -8,7 +8,6 @@ from pipecat.frames.frames import (
     Frame,
     LLMFullResponseEndFrame,
     LLMFullResponseStartFrame,
-    LLMRunFrame,
     LLMTextFrame,
     OutputTransportMessageFrame,
     TTSSpeakFrame,
@@ -72,6 +71,11 @@ Tutor strategy:
 """.strip()
 
 
+def clean_opening_text(value: str) -> str:
+    text = " ".join(value.split())
+    return text[:280] if text else "Tell me about one project you are proud of."
+
+
 class AssistantTurnPublisher(FrameProcessor):
     def __init__(self, *, session_id: str, **kwargs):
         super().__init__(**kwargs)
@@ -112,6 +116,7 @@ async def run_bot(webrtc_connection, session_params: dict[str, str]):
     scenario_id = session_params.get("scenario_id", "interview")
     task_id = session_params.get("task_id", "internship-intro")
     target_goal = session_params.get("target_goal", "make the answer clear")
+    opening_text = clean_opening_text(session_params.get("opening_text", ""))
 
     transport = SmallWebRTCTransport(
         webrtc_connection=webrtc_connection,
@@ -155,8 +160,8 @@ async def run_bot(webrtc_connection, session_params: dict[str, str]):
     context = LLMContext(
         [
             {
-                "role": "user",
-                "content": "Start by greeting me briefly and ask the first practice question.",
+                "role": "assistant",
+                "content": opening_text,
             }
         ],
     )
@@ -198,7 +203,7 @@ async def run_bot(webrtc_connection, session_params: dict[str, str]):
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
         logger.info(f"Client connected for session {session_id}")
-        await worker.queue_frames([LLMRunFrame()])
+        await worker.queue_frames([TTSSpeakFrame(opening_text)])
 
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):

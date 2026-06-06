@@ -191,6 +191,7 @@ export function createPipecatOfferUrl(params: {
   scenarioId: string;
   taskId: string;
   targetGoal: string;
+  openingText?: string;
 }) {
   const baseUrl = import.meta.env.VITE_PIPECAT_BASE_URL || "http://127.0.0.1:7860";
   const businessApiUrl = import.meta.env.VITE_BUSINESS_API_URL || "http://127.0.0.1:5174";
@@ -199,6 +200,9 @@ export function createPipecatOfferUrl(params: {
   url.searchParams.set("scenario_id", params.scenarioId);
   url.searchParams.set("task_id", params.taskId);
   url.searchParams.set("target_goal", params.targetGoal);
+  if (params.openingText?.trim()) {
+    url.searchParams.set("opening_text", params.openingText.trim());
+  }
   url.searchParams.set("business_api_url", businessApiUrl);
   return url.toString();
 }

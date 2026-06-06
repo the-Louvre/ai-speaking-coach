@@ -1,4 +1,4 @@
-import type { BotLLMTextData, TranscriptData, TransportState } from "@pipecat-ai/client-js";
+import type { BotLLMTextData, Participant, TranscriptData, TransportState } from "@pipecat-ai/client-js";
 import { PipecatClient } from "@pipecat-ai/client-js";
 import { SmallWebRTCTransport } from "@pipecat-ai/small-webrtc-transport";
 
@@ -62,6 +62,11 @@ export function shouldDetachBotAudioTrack(track: MediaStreamTrack) {
   return track.readyState === "ended";
 }
 
+export function shouldAttachBotAudioTrack(track: MediaStreamTrack, participant?: Participant) {
+  if (track.kind !== "audio") return false;
+  return participant?.local !== true;
+}
+
 export function createPipecatVoiceClient({
   webrtcUrl,
   callbacks
@@ -71,9 +76,19 @@ export function createPipecatVoiceClient({
 }): PipecatVoiceClient {
   const botAudio = createAudioElement();
   let botLlmChunks: string[] = [];
+  let isConnected = false;
 
-  function attachBotAudioTrack(track: MediaStreamTrack) {
-    if (track.kind !== "audio") return;
+  function setMicEnabledSafely(enabled: boolean) {
+    if (!isConnected) return;
+    try {
+      client.enableMic(enabled);
+    } catch {
+      // Device state may briefly race during connect/disconnect; the next state event will recover.
+    }
+  }
+
+  function attachBotAudioTrack(track: MediaStreamTrack, participant?: Participant) {
+    if (!shouldAttachBotAudioTrack(track, participant)) return;
     botAudio.srcObject = new MediaStream([track]);
     void botAudio.play().catch(() => {
       callbacks.onError(
@@ -105,16 +120,28 @@ export function createPipecatVoiceClient({
     enableCam: false,
     enableMic: true,
     callbacks: {
-      onConnected: () => callbacks.onStatus("connected"),
-      onDisconnected: () => callbacks.onDisconnected(),
+      onConnected: () => {
+        isConnected = true;
+        callbacks.onStatus("connected");
+      },
+      onDisconnected: () => {
+        isConnected = false;
+        callbacks.onDisconnected();
+      },
       onTransportStateChanged: (state) => callbacks.onStatus(state),
       onBotReady: () => callbacks.onStatus("bot-ready"),
       onUserStartedSpeaking: () => callbacks.onStatus("user-speaking"),
-      onBotStartedSpeaking: () => callbacks.onStatus("bot-speaking"),
-      onBotStoppedSpeaking: () => callbacks.onStatus("connected"),
+      onBotStartedSpeaking: () => {
+        setMicEnabledSafely(false);
+        callbacks.onStatus("bot-speaking");
+      },
+      onBotStoppedSpeaking: () => {
+        setMicEnabledSafely(true);
+        callbacks.onStatus("connected");
+      },
       onTrackStarted: attachBotAudioTrack,
-      onTrackStopped: (track) => {
-        if (track.kind === "audio" && botAudio.srcObject && shouldDetachBotAudioTrack(track)) {
+      onTrackStopped: (track, participant) => {
+        if (shouldAttachBotAudioTrack(track, participant) && botAudio.srcObject && shouldDetachBotAudioTrack(track)) {
           botAudio.srcObject = null;
         }
       },
@@ -147,6 +174,7 @@ export function createPipecatVoiceClient({
       await client.connect({ webrtcUrl });
     },
     async disconnect() {
+      isConnected = false;
       await client.disconnect();
       botAudio.pause();
       botAudio.srcObject = null;

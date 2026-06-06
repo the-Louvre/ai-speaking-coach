@@ -269,7 +269,8 @@ export default function App() {
           sessionId: started.sessionId,
           scenarioId: scenario.id,
           taskId: task.id,
-          targetGoal: task.focus
+          targetGoal: task.focus,
+          openingText: started.aiText
         }),
         callbacks: {
           onStatus: updatePracticeStatusFromPipecat,
