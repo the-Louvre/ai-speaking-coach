@@ -58,6 +58,10 @@ function createAudioElement() {
   return audio;
 }
 
+export function shouldDetachBotAudioTrack(track: MediaStreamTrack) {
+  return track.readyState === "ended";
+}
+
 export function createPipecatVoiceClient({
   webrtcUrl,
   callbacks
@@ -110,7 +114,7 @@ export function createPipecatVoiceClient({
       onBotStoppedSpeaking: () => callbacks.onStatus("connected"),
       onTrackStarted: attachBotAudioTrack,
       onTrackStopped: (track) => {
-        if (track.kind === "audio" && botAudio.srcObject) {
+        if (track.kind === "audio" && botAudio.srcObject && shouldDetachBotAudioTrack(track)) {
           botAudio.srcObject = null;
         }
       },
