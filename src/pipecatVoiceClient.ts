@@ -1,4 +1,4 @@
-import type { BotOutputData, BotTTSTextData, TranscriptData, TransportState } from "@pipecat-ai/client-js";
+import type { BotLLMTextData, TranscriptData, TransportState } from "@pipecat-ai/client-js";
 import { PipecatClient } from "@pipecat-ai/client-js";
 import { SmallWebRTCTransport } from "@pipecat-ai/small-webrtc-transport";
 
@@ -6,7 +6,7 @@ export type PipecatVoiceTurn = {
   speaker: "ai" | "user" | "system";
   text: string;
   timestamp?: string;
-  source: "server" | "transcript" | "bot_output" | "tts_text";
+  source: "server" | "transcript" | "bot_llm";
 };
 
 export type PipecatVoiceCallbacks = {
@@ -49,15 +49,13 @@ function transcriptToTurn(data: TranscriptData): PipecatVoiceTurn | null {
   };
 }
 
-function botOutputToTurn(data: BotOutputData | BotTTSTextData): PipecatVoiceTurn | null {
-  const text = data.text.trim();
-  if (!text) return null;
-  return {
-    speaker: "ai",
-    text,
-    timestamp: new Date().toISOString(),
-    source: "bot_output"
-  };
+function createAudioElement() {
+  const audio = document.createElement("audio");
+  audio.autoplay = true;
+  audio.setAttribute("playsinline", "true");
+  audio.style.display = "none";
+  document.body.appendChild(audio);
+  return audio;
 }
 
 export function createPipecatVoiceClient({
@@ -67,6 +65,33 @@ export function createPipecatVoiceClient({
   webrtcUrl: string;
   callbacks: PipecatVoiceCallbacks;
 }): PipecatVoiceClient {
+  const botAudio = createAudioElement();
+  let botLlmChunks: string[] = [];
+
+  function attachBotAudioTrack(track: MediaStreamTrack) {
+    if (track.kind !== "audio") return;
+    botAudio.srcObject = new MediaStream([track]);
+    void botAudio.play().catch(() => {
+      callbacks.onError("浏览器阻止了 AI 语音自动播放，请再点一次开始训练或检查浏览器声音权限。");
+    });
+  }
+
+  function appendBotLlmText(data: BotLLMTextData) {
+    if (data.text) botLlmChunks.push(data.text);
+  }
+
+  function flushBotLlmTurn() {
+    const text = botLlmChunks.join("").replace(/\s+/g, " ").trim();
+    botLlmChunks = [];
+    if (!text) return;
+    callbacks.onTurn({
+      speaker: "ai",
+      text,
+      timestamp: new Date().toISOString(),
+      source: "bot_llm"
+    });
+  }
+
   const client = new PipecatClient({
     transport: new SmallWebRTCTransport({
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
@@ -80,19 +105,22 @@ export function createPipecatVoiceClient({
       onBotReady: () => callbacks.onStatus("bot-ready"),
       onUserStartedSpeaking: () => callbacks.onStatus("user-speaking"),
       onBotStartedSpeaking: () => callbacks.onStatus("bot-speaking"),
+      onBotStoppedSpeaking: () => callbacks.onStatus("connected"),
+      onTrackStarted: attachBotAudioTrack,
+      onTrackStopped: (track) => {
+        if (track.kind === "audio" && botAudio.srcObject) {
+          botAudio.srcObject = null;
+        }
+      },
       onUserTranscript: (data) => {
         const turn = transcriptToTurn(data);
         if (turn) callbacks.onTurn(turn);
       },
-      onBotOutput: (data) => {
-        if (!data.spoken) return;
-        const turn = botOutputToTurn(data);
-        if (turn) callbacks.onTurn(turn);
+      onBotLlmStarted: () => {
+        botLlmChunks = [];
       },
-      onBotTtsText: (data) => {
-        const turn = botOutputToTurn(data);
-        if (turn) callbacks.onTurn({ ...turn, source: "tts_text" });
-      },
+      onBotLlmText: appendBotLlmText,
+      onBotLlmStopped: flushBotLlmTurn,
       onServerMessage: (data) => {
         const turn = normalizeServerTurn(data);
         if (turn) callbacks.onTurn(turn);
@@ -111,6 +139,9 @@ export function createPipecatVoiceClient({
     },
     async disconnect() {
       await client.disconnect();
+      botAudio.pause();
+      botAudio.srcObject = null;
+      botAudio.remove();
     }
   };
 }

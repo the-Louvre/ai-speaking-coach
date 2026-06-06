@@ -191,7 +191,8 @@ export default function App() {
   }
 
   function dedupeVoiceTurn(turn: PipecatVoiceTurn) {
-    const key = `${turn.speaker}:${turn.text}`;
+    const normalizedText = turn.text.replace(/\s+/g, " ").trim();
+    const key = `${turn.speaker}:${normalizedText}`;
     if (recordedTurnKeysRef.current.has(key)) return true;
     recordedTurnKeysRef.current.add(key);
     return false;
@@ -199,15 +200,17 @@ export default function App() {
 
   async function recordVoiceTurn(turn: PipecatVoiceTurn, sessionId: string) {
     if (dedupeVoiceTurn(turn)) return;
+    const text = turn.text.replace(/\s+/g, " ").trim();
+    if (!text) return;
     const result = await api.addSessionTurn(sessionId, {
       speaker: turn.speaker,
-      text: turn.text,
+      text,
       timestamp: turn.timestamp || new Date().toISOString()
     });
     setPracticeSession(result.session);
     setConversationTurns(result.session.conversation_turns);
     if (turn.speaker === "ai") {
-      setLatestAiText(turn.text);
+      setLatestAiText(text);
       setPracticeStatus("speaking");
       setCoachState("asking");
       window.setTimeout(() => setPracticeStatus("listening"), 800);

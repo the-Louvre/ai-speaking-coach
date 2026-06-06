@@ -1,11 +1,18 @@
 import os
-from typing import Any
+from datetime import datetime, timezone
 
-import httpx
 from dotenv import load_dotenv
 from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
-from pipecat.frames.frames import LLMRunFrame, TTSSpeakFrame
+from pipecat.frames.frames import (
+    Frame,
+    LLMFullResponseEndFrame,
+    LLMFullResponseStartFrame,
+    LLMRunFrame,
+    LLMTextFrame,
+    OutputTransportMessageFrame,
+    TTSSpeakFrame,
+)
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.aggregators.llm_context import LLMContext
@@ -13,10 +20,11 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
 )
-from pipecat.processors.transcript_processor import TranscriptProcessor
-from pipecat.processors.user_idle_processor import UserIdleProcessor
+from pipecat.processors.frameworks.rtvi import models as RTVI
+from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+from pipecat.processors.idle_frame_processor import IdleFrameProcessor
 from pipecat.services.assemblyai.stt import AssemblyAISTTService
-from pipecat.services.cartesia import CartesiaTTSService
+from pipecat.services.cartesia.tts import CartesiaTTSService
 from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.transports.base_transport import TransportParams
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
@@ -43,6 +51,9 @@ Mode:
 - Ask one short follow-up at a time and keep the session moving.
 - Give only light in-session guidance. Leave detailed grammar and scoring for the final report.
 - Speak English only unless the user is stuck; then give one short Chinese scaffold and return to English.
+- You are in a real-time voice call with TTS audio. Never say you are text-only.
+- If the learner says they cannot hear you, say one short check like
+  "I am speaking now; please check your speaker output," then continue the practice.
 
 Training context:
 - scenario_id: {scenario_id}
@@ -61,29 +72,39 @@ Tutor strategy:
 """.strip()
 
 
-async def record_turn(
-    business_api_url: str,
-    session_id: str,
-    speaker: str,
-    text: str,
-    timestamp: str | None = None,
-) -> None:
-    if not business_api_url or not session_id or not text.strip():
-        return
+class AssistantTurnPublisher(FrameProcessor):
+    def __init__(self, *, session_id: str, **kwargs):
+        super().__init__(**kwargs)
+        self._session_id = session_id
+        self._assistant_chunks: list[str] = []
 
-    url = f"{business_api_url.rstrip('/')}/api/session/{session_id}/turns"
-    payload: dict[str, Any] = {
-        "speaker": speaker,
-        "text": text.strip(),
-    }
-    if timestamp:
-        payload["timestamp"] = timestamp
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)
 
-    try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            await client.post(url, json=payload)
-    except Exception as exc:
-        logger.warning(f"Failed to record {speaker} turn: {exc}")
+        if isinstance(frame, LLMFullResponseStartFrame):
+            self._assistant_chunks = []
+        elif isinstance(frame, LLMTextFrame):
+            self._assistant_chunks.append(frame.text)
+        elif isinstance(frame, LLMFullResponseEndFrame):
+            assistant_text = " ".join("".join(self._assistant_chunks).split())
+            self._assistant_chunks = []
+            if assistant_text:
+                await self.push_frame(
+                    OutputTransportMessageFrame(
+                        message=RTVI.ServerMessage(
+                            data={
+                                "type": "conversation_turn",
+                                "speaker": "ai",
+                                "text": assistant_text,
+                                "timestamp": datetime.now(timezone.utc).isoformat(),
+                                "session_id": self._session_id,
+                            }
+                        ).model_dump()
+                    ),
+                    direction,
+                )
+
+        await self.push_frame(frame, direction)
 
 
 async def run_bot(webrtc_connection, session_params: dict[str, str]):
@@ -91,7 +112,6 @@ async def run_bot(webrtc_connection, session_params: dict[str, str]):
     scenario_id = session_params.get("scenario_id", "interview")
     task_id = session_params.get("task_id", "internship-intro")
     target_goal = session_params.get("target_goal", "make the answer clear")
-    business_api_url = session_params.get("business_api_url") or env_first("BUSINESS_API_URL", default="")
 
     transport = SmallWebRTCTransport(
         webrtc_connection=webrtc_connection,
@@ -144,19 +164,7 @@ async def run_bot(webrtc_connection, session_params: dict[str, str]):
         context,
         user_params=LLMUserAggregatorParams(vad_analyzer=SileroVADAnalyzer()),
     )
-    transcript = TranscriptProcessor()
-
-    @transcript.event_handler("on_transcript_update")
-    async def on_transcript_update(processor, frame):
-        for message in frame.messages:
-            speaker = "ai" if message.role == "assistant" else "user"
-            await record_turn(
-                business_api_url=business_api_url,
-                session_id=session_id,
-                speaker=speaker,
-                text=message.content,
-                timestamp=getattr(message, "timestamp", None),
-            )
+    assistant_turn_publisher = AssistantTurnPublisher(session_id=session_id)
 
     worker: PipelineWorker | None = None
 
@@ -164,19 +172,18 @@ async def run_bot(webrtc_connection, session_params: dict[str, str]):
         if worker:
             await worker.queue_frames([TTSSpeakFrame("Take your time. Start with one clear sentence.")])
 
-    user_idle = UserIdleProcessor(timeout=6.0, callback=handle_user_idle)
+    user_idle = IdleFrameProcessor(timeout=6.0, callback=handle_user_idle)
 
     pipeline = Pipeline(
         [
             transport.input(),
             user_idle,
             stt,
-            transcript.user(),
             user_aggregator,
             llm,
+            assistant_turn_publisher,
             tts,
             transport.output(),
-            transcript.assistant(),
             assistant_aggregator,
         ]
     )

@@ -19,6 +19,7 @@ logs/
 # Dependencies
 node_modules/
 .pnpm-store/
+pipecat_service/.venv/
 
 # Build output
 dist/
@@ -29,6 +30,8 @@ coverage/
 # Runtime/cache
 .cache/
 .turbo/
+__pycache__/
+*.py[cod]
 
 # Demo artifacts generated locally
 artifacts/
