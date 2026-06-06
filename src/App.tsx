@@ -23,7 +23,7 @@ import { BrandTopBar } from "./components/BrandGuidelines";
 import { CoachAvatar } from "./components/CoachAvatar";
 import { ReportDashboard } from "./components/ReportDashboard";
 import { WeekDots } from "./components/WeekDots";
-import { HOME_COPY, VALUE_CARDS } from "./copy/coachCopy";
+import { VALUE_CARDS } from "./copy/coachCopy";
 import { getShanghaiDate, type CheckinState } from "./domain/checkin";
 import { GROWTH_MOCK } from "./domain/growthMock";
 import {
@@ -511,28 +511,36 @@ export default function App() {
         <section className="home-screen">
           <div className="home-hero">
             <section className="panel home-task">
-              <span className="eyebrow">今日任务</span>
-              <h2 className="home-task-title">
-                <span>今天只练 5 分钟，</span>
-                <span>把一个回答说清楚。</span>
+              <span className="eyebrow home-teacher-eyebrow">YOUR TEACHER IS LISTENING</span>
+              <h2 className="home-task-title just-say-title">
+                <span>
+                  Just<span className="green-dot">.</span>
+                </span>
+                <span>
+                  say it<span className="green-dot">.</span>
+                </span>
               </h2>
-              <p className="muted">{HOME_COPY.subtitle}</p>
-              <div className="goal-box">🎯 本轮目标：{task.focus}</div>
+              <p className="teacher-support-copy">
+                不用先想完美答案。<strong>你先开口，我先听完，再帮你改。</strong>
+              </p>
+              <div className="goal-box home-soft-target">
+                今天的目标很小：把项目结果讲清楚，哪怕只讲一句也可以。
+              </div>
               <div className="top-actions">
                 <button className="primary" onClick={enterPracticeRoom}>
                   <Play size={18} />
-                  {HOME_COPY.startButton}
+                  Say it
                 </button>
                 <button className="secondary" onClick={() => setScreen("prep")}>
-                  {HOME_COPY.changeScene}
+                  换个话题
                 </button>
                 {report && (
                   <button className="secondary" onClick={() => setScreen("report")}>
-                    {HOME_COPY.lastReport}
+                    看反馈
                   </button>
                 )}
               </div>
-              <p className="muted low-pressure-note">{HOME_COPY.lowPressureNote}</p>
+              <p className="muted low-pressure-note">不会实时打断。说完以后，再集中整理发音、语法和表达。</p>
             </section>
 
             <section className="panel home-coach">
@@ -541,27 +549,67 @@ export default function App() {
             </section>
 
             <section className="panel home-growth">
-              <span className="eyebrow">我的成长轨迹</span>
-              <div className="growth-row">
-                <span className="muted">连续练习</span>
-                <span className="growth-big">{GROWTH_MOCK.streakDays} 天 🔥</span>
+              <span className="eyebrow">打卡进度</span>
+              <div className="streak-headline">
+                <span>连续练习</span>
+                <strong>{GROWTH_MOCK.streakDays} 天</strong>
               </div>
-              <div className="growth-row">
-                <span className="muted">累计口语时间</span>
-                <strong>{GROWTH_MOCK.totalMinutes} 分钟</strong>
+              <div className="spark-status-row" aria-label="火花状态">
+                <div className="spark-chip spark-chip-burning">
+                  <span className="spark-flame" aria-hidden="true" />
+                  <div>
+                    <strong>火花燃烧中</strong>
+                    <span>第 {GROWTH_MOCK.streakDays} 天</span>
+                  </div>
+                </div>
+                <div className="spark-chip spark-chip-freeze">
+                  <span className="freeze-crystal" aria-hidden="true">
+                    <span />
+                  </span>
+                  <div>
+                    <strong>冻结保护</strong>
+                    <span>1 次可用</span>
+                  </div>
+                </div>
               </div>
-              <div className="growth-row">
-                <span className="muted">最近得分</span>
-                <strong>{GROWTH_MOCK.lastScore}</strong>
+              <div className="week-check-row" aria-label="本周打卡进度">
+                {["一", "二", "三"].map((day) => (
+                  <span className="done" key={day}>{day}</span>
+                ))}
+                <span className="today">今</span>
+                {["五", "六", "日"].map((day) => (
+                  <span key={day}>{day}</span>
+                ))}
               </div>
-              <div className="growth-row">
-                <span className="muted">当前薄弱项</span>
-                <span className="pill">{GROWTH_MOCK.weakAreaZh}</span>
+              <div className="streak-reward">你真的忍心吗，已经三天的火花了</div>
+              <div className="growth-metrics">
+                <div>
+                  <span>累计口语</span>
+                  <strong>{GROWTH_MOCK.totalMinutes} 分钟</strong>
+                </div>
+                <div>
+                  <span>最近得分</span>
+                  <strong>{GROWTH_MOCK.lastScore}</strong>
+                </div>
               </div>
-              <div className="next-target">
-                📌 推荐下一练：{GROWTH_MOCK.nextPracticeZh}
+              <div className="growth-trail-card">
+                <div>
+                  <span className="growth-trail-label">成长轨迹</span>
+                  <strong>68 → 72 → 76</strong>
+                  <p>正在进步：{GROWTH_MOCK.weakAreaZh}</p>
+                </div>
+                <button
+                  type="button"
+                  className="growth-trail-button"
+                  onClick={() => setScreen(report ? "report" : "prep")}
+                >
+                  查看成长轨迹
+                </button>
+              </div>
+              <div className="next-target home-next-practice">
+                下一练：{GROWTH_MOCK.nextPracticeZh}
                 <br />
-                {GROWTH_MOCK.nextTipZh}
+                重点练“{GROWTH_MOCK.weakAreaZh}”，先说结果，再补数字。
               </div>
             </section>
           </div>
