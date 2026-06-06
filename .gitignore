@@ -30,6 +30,7 @@ coverage/
 # Runtime/cache
 .cache/
 .turbo/
+.superpowers/
 __pycache__/
 *.py[cod]
 
