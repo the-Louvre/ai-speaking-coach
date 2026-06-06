@@ -36,7 +36,7 @@ export function practiceStatusLabel(status: PracticeStatus) {
 }
 
 export function getPracticeExperienceCopy({ status, busy, error }: PracticeExperienceInput): PracticeExperienceCopy {
-  if (error) return { headline: statusLabels[status], helper: error };
+  if (error) return { headline: "Connection needs attention", helper: error };
   if (busy) return { headline: statusLabels[status], helper: busy };
   return { headline: statusLabels[status], helper: statusHelpers[status] };
 }
@@ -65,7 +65,13 @@ export function mapPracticeStartError(error: unknown) {
     return "Voice connected, but AI audio is not playing yet. Check output device or restart training.";
   }
 
-  if (lower.includes("failed to fetch") || lower.includes("networkerror") || lower.includes("127.0.0.1:7860")) {
+  if (
+    lower.includes("failed to fetch") ||
+    lower.includes("load failed") ||
+    lower.includes("networkerror") ||
+    lower.includes("cors") ||
+    lower.includes("127.0.0.1:7860")
+  ) {
     return "Voice service is not running. Start the Python service on 127.0.0.1:7860, then try again.";
   }
 

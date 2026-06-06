@@ -3220,6 +3220,7 @@ textarea:focus,
   max-height: 230px;
   gap: 10px;
   overflow-y: auto;
+  scroll-behavior: smooth;
   border: 2px solid var(--swan);
   border-radius: 18px;
   padding: 14px;
@@ -3229,12 +3230,28 @@ textarea:focus,
 
 .caption-line {
   display: grid;
-  grid-template-columns: 58px minmax(0, 1fr);
+  grid-template-columns: 70px minmax(0, 1fr);
   gap: 10px;
   align-items: start;
   border-radius: 14px;
   padding: 10px 12px;
   background: var(--panel-bg);
+  transition:
+    background-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.caption-line.latest {
+  box-shadow:
+    inset 4px 0 0 var(--feather-green),
+    0 6px 18px rgba(88, 204, 2, 0.1);
+  transform: translateY(-1px);
+}
+
+.caption-meta {
+  display: grid;
+  gap: 3px;
 }
 
 .caption-line span {
@@ -3242,6 +3259,12 @@ textarea:focus,
   font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
+}
+
+.caption-meta small {
+  color: var(--hare);
+  font-size: 11px;
+  font-weight: 900;
 }
 
 .caption-line p {
@@ -3265,6 +3288,11 @@ textarea:focus,
   color: var(--wolf);
   font-weight: 800;
   text-align: center;
+}
+
+.caption-line.system p {
+  color: var(--wolf);
+  font-weight: 850;
 }
 
 .keyword-panel {
@@ -3342,7 +3370,51 @@ button.danger {
 }
 
 .voice-log-side {
+  position: relative;
   min-height: 620px;
+}
+
+.voice-log-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.voice-log-header .eyebrow {
+  display: block;
+  margin-bottom: 3px;
+}
+
+.voice-log-header p {
+  margin: 0;
+  color: var(--wolf);
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
+.voice-log-live {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  border: 2px solid var(--swan);
+  border-radius: 999px;
+  padding: 0 10px;
+  background: var(--snow);
+  color: var(--wolf);
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.voice-log-live.active {
+  border-color: rgba(28, 176, 246, 0.32);
+  background: #eef8ff;
+  color: var(--macaw);
 }
 
 .voice-only-log {
@@ -3350,6 +3422,29 @@ button.danger {
   min-height: 520px;
   max-height: 560px;
   align-content: start;
+}
+
+.transcript-follow-button {
+  position: absolute;
+  right: 14px;
+  bottom: 16px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  border: 2px solid var(--macaw);
+  border-radius: 999px;
+  padding: 0 13px;
+  background: var(--snow);
+  box-shadow: 0 5px 0 rgba(28, 176, 246, 0.24);
+  color: var(--macaw);
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.transcript-follow-button:hover {
+  transform: translateY(-2px);
 }
 
 .tts-player {

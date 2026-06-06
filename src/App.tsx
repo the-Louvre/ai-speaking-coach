@@ -1,8 +1,10 @@
 import {
+  ArrowDown,
   Award,
   BarChart3,
   CalendarDays,
   Headphones,
+  MessageCircle,
   PencilLine,
   Play,
   Route,
@@ -12,7 +14,7 @@ import {
   Target
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CoachState, ConversationTurn, PracticeSession, ReportResult } from "../shared/schemas";
 import type { Scenario } from "../server/data";
 import { api, checkPipecatHealth, createPipecatOfferUrl, type HealthResult } from "./api";
@@ -43,6 +45,7 @@ import {
   practiceStatusLabel,
   type PracticeStatus
 } from "./practiceExperience";
+import { getTranscriptFollowState } from "./practiceTranscript";
 
 type Screen = "home" | "prep" | "practice" | "report";
 type JourneyStatus = "done" | "active" | "waiting";
@@ -109,6 +112,11 @@ export default function App() {
   const voiceClientRef = useRef<PipecatVoiceClient | null>(null);
   const countdownRef = useRef<number | null>(null);
   const recordedTurnKeysRef = useRef(new Set<string>());
+  const transcriptLogRef = useRef<HTMLDivElement | null>(null);
+  const transcriptPinnedRef = useRef(true);
+  const previousTurnCountRef = useRef(0);
+  const [transcriptPinnedToLatest, setTranscriptPinnedToLatest] = useState(true);
+  const [unseenTurnCount, setUnseenTurnCount] = useState(0);
 
   const todayDone = checkin.completedDates.includes(getShanghaiDate());
   const learningSummary = useMemo(() => summarizeLearning(learning), [learning]);
@@ -155,6 +163,39 @@ export default function App() {
     };
   }, []);
 
+  useLayoutEffect(() => {
+    const log = transcriptLogRef.current;
+    const previousTurnCount = previousTurnCountRef.current;
+    const currentTurnCount = conversationTurns.length;
+    const newTurnCount = Math.max(0, currentTurnCount - previousTurnCount);
+    previousTurnCountRef.current = currentTurnCount;
+
+    if (!log) return;
+    if (currentTurnCount === 0) {
+      setTranscriptPinned(true);
+      setUnseenTurnCount(0);
+      return;
+    }
+    if (newTurnCount === 0) return;
+
+    if (transcriptPinnedRef.current) {
+      scrollTranscriptToLatest("smooth");
+      return;
+    }
+
+    const followState = getTranscriptFollowState({
+      scrollTop: log.scrollTop,
+      clientHeight: log.clientHeight,
+      scrollHeight: log.scrollHeight,
+      newTurnCount
+    });
+    if (followState.shouldFollow) {
+      scrollTranscriptToLatest("smooth");
+      return;
+    }
+    setUnseenTurnCount((current) => current + followState.unseenCount);
+  }, [conversationTurns.length]);
+
   const coachLine = useMemo(() => {
     if (screen === "report" && report) return report.coachCommentZh;
     if (todayDone) return "今日已完成，可以再练一轮，把答案压得更准。";
@@ -164,6 +205,34 @@ export default function App() {
   function enterPracticeRoom() {
     setStartError("");
     setScreen("practice");
+  }
+
+  function setTranscriptPinned(nextPinned: boolean) {
+    transcriptPinnedRef.current = nextPinned;
+    setTranscriptPinnedToLatest(nextPinned);
+  }
+
+  function scrollTranscriptToLatest(behavior: ScrollBehavior = "smooth") {
+    const log = transcriptLogRef.current;
+    if (!log) return;
+    log.scrollTo({ top: log.scrollHeight, behavior });
+    setTranscriptPinned(true);
+    setUnseenTurnCount(0);
+  }
+
+  function updateTranscriptScrollState() {
+    const log = transcriptLogRef.current;
+    if (!log) return;
+    const followState = getTranscriptFollowState({
+      scrollTop: log.scrollTop,
+      clientHeight: log.clientHeight,
+      scrollHeight: log.scrollHeight,
+      newTurnCount: 0
+    });
+    if (followState.shouldFollow !== transcriptPinnedRef.current) {
+      setTranscriptPinned(followState.shouldFollow);
+    }
+    if (followState.shouldFollow) setUnseenTurnCount(0);
   }
 
   function startCountdown(initialSeconds: number, sessionId: string) {
@@ -246,6 +315,9 @@ export default function App() {
     setPracticeStatus("connecting");
     setCoachState("thinking");
     recordedTurnKeysRef.current.clear();
+    previousTurnCountRef.current = 0;
+    setTranscriptPinned(true);
+    setUnseenTurnCount(0);
 
     try {
       await voiceClientRef.current?.disconnect();
@@ -621,7 +693,7 @@ export default function App() {
             </div>
             <div className="voice-primary-controls" aria-label="实时训练控制">
               <button
-                className="primary wide"
+                className={`${practiceStatus === "idle" || practiceStatus === "completed" ? "primary" : "secondary"} wide`}
                 onClick={startConversation}
                 disabled={Boolean(busy) || (practiceStatus !== "idle" && practiceStatus !== "completed")}
               >
@@ -637,7 +709,7 @@ export default function App() {
                 结束训练
               </button>
               <button
-                className="secondary wide"
+                className={`${practiceStatus === "ended" ? "primary" : "secondary"} wide`}
                 onClick={generatePracticeReport}
                 disabled={!practiceSession || practiceStatus !== "ended" || Boolean(busy)}
               >
@@ -648,19 +720,60 @@ export default function App() {
           </div>
 
           <aside className="practice-side voice-log-side" aria-label="实时对话记录">
-            <span className="eyebrow">实时对话记录</span>
-            <div className="caption-stream voice-only-log">
+            <div className="voice-log-header">
+              <div>
+                <span className="eyebrow">实时对话记录</span>
+                <p>
+                  {conversationTurns.length > 0
+                    ? `${conversationTurns.length} 条记录 · ${transcriptPinnedToLatest ? "正在跟随最新" : "查看历史中"}`
+                    : "开始后会自动记录每一句对话"}
+                </p>
+              </div>
+              <span
+                className={`voice-log-live ${
+                  practiceStatus === "listening" || practiceStatus === "speaking" ? "active" : ""
+                }`}
+              >
+                <MessageCircle size={15} />
+                Live
+              </span>
+            </div>
+            <div
+              className="caption-stream voice-only-log"
+              ref={transcriptLogRef}
+              onScroll={updateTranscriptScrollState}
+              aria-live="polite"
+            >
               {conversationTurns.length === 0 ? (
-                <div className="caption-line system">Start training and your complete conversation will appear here.</div>
+                <div className="caption-line system">
+                  <span>Ready</span>
+                  <p>开始训练后，我会把你和 AI 的每一句话记录在这里，并自动跟随最新内容。</p>
+                </div>
               ) : (
-                conversationTurns.map((turn) => (
-                  <div className={`caption-line ${turn.speaker}`} key={turn.id}>
-                    <span>{turn.speaker === "ai" ? "AI" : turn.speaker === "user" ? "You" : "System"}</span>
+                conversationTurns.map((turn, index) => (
+                  <div
+                    className={`caption-line ${turn.speaker} ${index === conversationTurns.length - 1 ? "latest" : ""}`}
+                    key={turn.id}
+                  >
+                    <div className="caption-meta">
+                      <span>{turn.speaker === "ai" ? "AI" : turn.speaker === "user" ? "You" : "System"}</span>
+                      <small>{formatTurnTime(turn.timestamp)}</small>
+                    </div>
                     <p>{turn.text}</p>
                   </div>
                 ))
               )}
             </div>
+            {unseenTurnCount > 0 && (
+              <button
+                type="button"
+                className="transcript-follow-button"
+                onClick={() => scrollTranscriptToLatest()}
+              >
+                <ArrowDown size={16} />
+                {unseenTurnCount} 条新记录
+              </button>
+            )}
           </aside>
         </section>
         </>
@@ -745,6 +858,10 @@ function formatSeconds(value: number) {
   const minutes = Math.floor(value / 60);
   const seconds = value % 60;
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function formatTurnTime(value: string) {
+  return new Date(value).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
 }
 
 function AbilityRadar({ dimensions }: { dimensions: ReportResult["dimensions"] }) {

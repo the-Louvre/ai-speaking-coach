@@ -2,9 +2,10 @@ import argparse
 import os
 import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import uvicorn
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 from fastapi import BackgroundTasks, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
@@ -16,7 +17,20 @@ from pipecat.transports.smallwebrtc.request_handler import (
 
 from bot import run_bot
 
-load_dotenv(override=True)
+
+def load_local_env() -> None:
+    service_dir = Path(__file__).resolve().parent
+    for env_file, override in ((service_dir.parent / ".env", False), (service_dir / ".env", True)):
+        if not env_file.exists():
+            continue
+        for key, value in dotenv_values(env_file).items():
+            if value is None or value == "":
+                continue
+            if override or not os.getenv(key):
+                os.environ[key] = value
+
+
+load_local_env()
 
 small_webrtc_handler = SmallWebRTCRequestHandler()
 
@@ -31,6 +45,7 @@ app = FastAPI(title="Lingo Coach Pipecat Voice Agent", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],
+    allow_origin_regex=r"^https?://(127\.0\.0\.1|localhost):\d+$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

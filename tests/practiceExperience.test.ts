@@ -35,5 +35,6 @@ describe("practice experience copy", () => {
     );
     expect(mapPracticeStartError(new Error("provider is not configured"))).toContain("Voice provider is not ready");
     expect(mapPracticeStartError(new Error("audio track not found"))).toContain("AI audio is not playing");
+    expect(mapPracticeStartError(new TypeError("Load failed"))).toContain("Voice service is not running");
   });
 });
