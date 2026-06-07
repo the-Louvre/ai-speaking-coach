@@ -67,5 +67,7 @@ describe("ReportDashboard", () => {
     expect(markup).toContain("发音技巧");
     expect(markup).toContain("推荐重练句");
     expect(markup).toContain("查看完整对话");
+    expect(markup).toContain("分析来源");
+    expect(markup).toContain("本次对话 1 条用户发言");
   });
 });

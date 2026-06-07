@@ -2721,6 +2721,21 @@ textarea:focus,
   font-weight: 900;
 }
 
+.one-report-meta .report-source-chip {
+  border-color: rgba(255, 255, 255, 0.58);
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.one-report-meta .report-source-chip.live {
+  border-color: rgba(15, 153, 86, 0.24);
+  background: rgba(255, 255, 255, 0.32);
+}
+
+.one-report-meta .report-source-chip.fallback {
+  border-color: rgba(255, 214, 64, 0.72);
+  background: rgba(255, 247, 214, 0.28);
+}
+
 .one-report-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

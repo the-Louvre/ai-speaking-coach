@@ -7,13 +7,15 @@ import type {
   TtsProvider
 } from "../config";
 import type {
+  ConversationTurn,
   DialogueTurnResult,
   ReportResult,
+  SentenceAnalysis,
   SpeechAudioResult,
   TranscriptResult
 } from "../../shared/schemas";
 import { dialogueTurnResultSchema, reportResultSchema } from "../../shared/schemas";
-import { mockDialogueTurn, mockReport, mockSpeech, mockTranscribe } from "./mockProviders";
+import { mockDialogueTurn, mockSpeech, mockTranscribe } from "./mockProviders";
 
 export type LiveConfig = {
   apiMode: "mock" | "live";
@@ -529,6 +531,69 @@ function readStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
 }
 
+function readFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function clampScore(value: number): number {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function normalizeScoreScale(value: number, scaleHint: number): number {
+  if (value > 0 && value <= 1 && scaleHint > 1) return value * 100;
+  if (value > 0 && value <= 10 && scaleHint > 10) return value * 10;
+  return value;
+}
+
+function readDimensionId(value: unknown): keyof typeof dimensionFallbacks | null {
+  const key = readText(value).toLowerCase().replace(/[\s_\-:/]+/g, "");
+  if (!key) return null;
+  if (key.includes("fluency") || key.includes("流利")) return "fluency";
+  if (key.includes("pronunciation") || key.includes("发音")) return "pronunciation";
+  if (key.includes("grammar") || key.includes("语法")) return "grammar";
+  if (key.includes("vocabulary") || key.includes("词汇")) return "vocabulary";
+  if (key.includes("coherence") || key.includes("连贯")) return "coherence";
+  if (key.includes("taskcompletion") || key.includes("任务完成")) return "task_completion";
+  if (key.includes("interaction") || key.includes("互动")) return "interaction";
+  return null;
+}
+
+const dimensionFallbacks = {
+  fluency: { labelZh: "流利度", labelEn: "Fluency", offset: 3 },
+  pronunciation: { labelZh: "发音清晰度", labelEn: "Pronunciation", offset: -3 },
+  grammar: { labelZh: "语法准确度", labelEn: "Grammar", offset: -1 },
+  vocabulary: { labelZh: "词汇准确度", labelEn: "Vocabulary", offset: 0 },
+  coherence: { labelZh: "连贯性", labelEn: "Coherence", offset: 1 },
+  task_completion: { labelZh: "任务完成度", labelEn: "Task Completion", offset: 2 },
+  interaction: { labelZh: "互动回应", labelEn: "Interaction", offset: -4 }
+} as const;
+
+function readDimensionScore(value: unknown, fallback: number): number {
+  const direct = readFiniteNumber(value);
+  if (direct !== null) return clampScore(normalizeScoreScale(direct, fallback));
+
+  const item = asRecord(value);
+  const nested = readFiniteNumber(item.score ?? item.value ?? item.points ?? item.rating);
+  return clampScore(nested !== null ? normalizeScoreScale(nested, fallback) : fallback);
+}
+
+function alignDimensionScoresToTotal<T extends { score: number }>(dimensions: T[], totalScore: number): T[] {
+  if (!dimensions.length) return dimensions;
+  const average = dimensions.reduce((sum, dimension) => sum + dimension.score, 0) / dimensions.length;
+  const delta = totalScore - average;
+  if (Math.abs(delta) < 4) return dimensions;
+
+  return dimensions.map((dimension) => ({
+    ...dimension,
+    score: clampScore(dimension.score + delta)
+  }));
+}
+
 function normalizeSentenceAnalyses(value: unknown) {
   if (!Array.isArray(value)) return undefined;
   const analyses = value
@@ -613,36 +678,48 @@ function normalizeNextPractice(value: unknown) {
 function normalizeReportJson(json: unknown, provider: string): Record<string, unknown> {
   const raw = json as Record<string, unknown>;
   const dimensionsRaw = raw.dimensions;
-  const dimensionFallbacks = {
-    fluency: { labelZh: "流利度", labelEn: "Fluency" },
-    pronunciation: { labelZh: "发音清晰度", labelEn: "Pronunciation" },
-    grammar: { labelZh: "语法准确度", labelEn: "Grammar" },
-    vocabulary: { labelZh: "词汇准确度", labelEn: "Vocabulary" },
-    coherence: { labelZh: "连贯性", labelEn: "Coherence" },
-    task_completion: { labelZh: "任务完成度", labelEn: "Task Completion" },
-    interaction: { labelZh: "互动回应", labelEn: "Interaction" }
-  } as const;
-  const dimensions = Array.isArray(dimensionsRaw)
-    ? dimensionsRaw
-    : Object.entries(dimensionFallbacks).map(([id, label]) => {
-        const value =
-          dimensionsRaw && typeof dimensionsRaw === "object"
-            ? (dimensionsRaw as Record<string, unknown>)[id]
-            : undefined;
-        const item = typeof value === "object" && value ? (value as Record<string, unknown>) : {};
-        return {
-          id,
-          labelZh: typeof item.labelZh === "string" ? item.labelZh : label.labelZh,
-          labelEn: typeof item.labelEn === "string" ? item.labelEn : label.labelEn,
-          score: typeof item.score === "number" ? item.score : 80,
-          explanationZh:
-            typeof item.explanationZh === "string"
-              ? item.explanationZh
-              : typeof item.explanation === "string"
-                ? item.explanation
-                : "本维度由 Qwen 根据转写、表达和任务完成情况评估。"
-        };
-      });
+  const rawTotalScore = readFiniteNumber(raw.totalScore ?? raw.score);
+  const totalScore = clampScore(rawTotalScore !== null ? normalizeScoreScale(rawTotalScore, 100) : 80);
+  const dimensionValues = new Map<keyof typeof dimensionFallbacks, unknown>();
+  const dimensionValuesByIndex: unknown[] = [];
+
+  if (Array.isArray(dimensionsRaw)) {
+    dimensionsRaw.forEach((dimension, index) => {
+      const item = asRecord(dimension);
+      const id = readDimensionId(item.id || item.key || item.dimension || item.name || item.labelEn || item.labelZh);
+      if (id) {
+        dimensionValues.set(id, dimension);
+      } else {
+        dimensionValuesByIndex[index] = dimension;
+      }
+    });
+  } else if (dimensionsRaw && typeof dimensionsRaw === "object") {
+    Object.entries(dimensionsRaw as Record<string, unknown>).forEach(([key, value]) => {
+      const item = asRecord(value);
+      const id = readDimensionId(key) || readDimensionId(item.id || item.key || item.dimension || item.name);
+      if (id) dimensionValues.set(id, value);
+    });
+  }
+
+  const normalizedDimensions = Object.entries(dimensionFallbacks).map(([id, label], index) => {
+    const dimensionId = id as keyof typeof dimensionFallbacks;
+    const value = dimensionValues.get(dimensionId) ?? dimensionValuesByIndex[index];
+    const item = asRecord(value);
+    const fallbackScore = totalScore + label.offset;
+    return {
+      id: dimensionId,
+      labelZh: typeof item.labelZh === "string" ? item.labelZh : label.labelZh,
+      labelEn: typeof item.labelEn === "string" ? item.labelEn : label.labelEn,
+      score: readDimensionScore(value, fallbackScore),
+      explanationZh:
+        typeof item.explanationZh === "string"
+          ? item.explanationZh
+          : typeof item.explanation === "string"
+            ? item.explanation
+        : "本维度由模型根据本次对话评分，已按总分口径归一化。"
+    };
+  });
+  const dimensions = alignDimensionScoresToTotal(normalizedDimensions, totalScore);
   const corrections = Array.isArray(raw.corrections)
     ? raw.corrections.map((correction) => {
         const item = typeof correction === "object" && correction ? (correction as Record<string, unknown>) : {};
@@ -657,7 +734,7 @@ function normalizeReportJson(json: unknown, provider: string): Record<string, un
   return {
     ...raw,
     reportId: typeof raw.reportId === "string" ? raw.reportId : `report_${Date.now()}`,
-    totalScore: typeof raw.totalScore === "number" ? raw.totalScore : 80,
+    totalScore,
     dimensions,
     summaryZh: typeof raw.summaryZh === "string" ? raw.summaryZh : String(raw.summary ?? ""),
     corrections,
@@ -669,6 +746,383 @@ function normalizeReportJson(json: unknown, provider: string): Record<string, un
     evidenceTurns: normalizeEvidenceTurns(raw.evidenceTurns || raw.evidence),
     nextPractice: normalizeNextPractice(raw.nextPractice || raw.drill || raw.recommendedPractice),
     provider
+  };
+}
+
+const reportDimensionLabels = [
+  { id: "fluency", labelZh: "流利度", labelEn: "Fluency" },
+  { id: "pronunciation", labelZh: "发音清晰度", labelEn: "Pronunciation" },
+  { id: "grammar", labelZh: "语法准确度", labelEn: "Grammar" },
+  { id: "vocabulary", labelZh: "词汇准确度", labelEn: "Vocabulary" },
+  { id: "coherence", labelZh: "连贯性", labelEn: "Coherence" },
+  { id: "task_completion", labelZh: "任务完成度", labelEn: "Task Completion" },
+  { id: "interaction", labelZh: "互动回应", labelEn: "Interaction" }
+] as const;
+
+function readNumber(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function createSyntheticTurn(
+  speaker: ConversationTurn["speaker"],
+  text: string,
+  index: number
+): ConversationTurn {
+  return {
+    id: `report_turn_${index}`,
+    speaker,
+    text,
+    timestamp: new Date(Date.now() + index).toISOString()
+  };
+}
+
+function readConversationTurns(value: unknown): ConversationTurn[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map<ConversationTurn | null>((turn, index) => {
+      const item = asRecord(turn);
+      const speakerRaw = readText(item.speaker);
+      const speaker = speakerRaw === "ai" || speakerRaw === "system" || speakerRaw === "user" ? speakerRaw : "user";
+      const text = readText(item.text || item.userText || item.aiText).trim();
+      if (!text) return null;
+      return {
+        id: readText(item.id) || `report_turn_${index}`,
+        speaker,
+        text,
+        timestamp: readText(item.timestamp) || new Date(Date.now() + index).toISOString(),
+        transcriptConfidence:
+          typeof item.transcriptConfidence === "number" ? item.transcriptConfidence : undefined,
+        audioDurationSec: typeof item.audioDurationSec === "number" ? item.audioDurationSec : undefined,
+        latencyMs: typeof item.latencyMs === "number" ? item.latencyMs : undefined,
+        hintZh: typeof item.hintZh === "string" ? item.hintZh : undefined,
+        keywords: Array.isArray(item.keywords) ? item.keywords.map(String) : undefined
+      } satisfies ConversationTurn;
+    })
+    .filter((turn): turn is ConversationTurn => turn !== null);
+}
+
+function readLegacyRoundTurns(value: unknown): ConversationTurn[] {
+  if (!Array.isArray(value)) return [];
+  const turns: ConversationTurn[] = [];
+  value.forEach((turn, index) => {
+    const item = asRecord(turn);
+    const aiText = readText(item.aiText).trim();
+    const userText = readText(item.userText).trim();
+    if (aiText) turns.push(createSyntheticTurn("ai", aiText, index * 2));
+    if (userText) {
+      turns.push({
+        ...createSyntheticTurn("user", userText, index * 2 + 1),
+        transcriptConfidence:
+          typeof item.transcriptConfidence === "number" ? item.transcriptConfidence : undefined
+      });
+    }
+  });
+  return turns;
+}
+
+function extractReportTurns(payload: unknown): ConversationTurn[] {
+  const item = asRecord(payload);
+  return readConversationTurns(item.conversation_turns).concat(readLegacyRoundTurns(item.turns));
+}
+
+function getUserTurns(payload: unknown): ConversationTurn[] {
+  return extractReportTurns(payload).filter((turn) => turn.speaker === "user" && turn.text.trim());
+}
+
+function normalizeForGrounding(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function isTextGroundedInUserTurns(value: string, userTurns: ConversationTurn[]): boolean {
+  const normalized = normalizeForGrounding(value);
+  if (!normalized) return false;
+  return userTurns.some((turn) => normalizeForGrounding(turn.text).includes(normalized));
+}
+
+function firstUsefulUserText(userTurns: ConversationTurn[]): string {
+  return userTurns[0]?.text || "I explained my project, but I need to make the result more specific.";
+}
+
+function createGroundedCorrection(userText: string) {
+  const lower = userText.toLowerCase();
+  if (lower.includes("urgent")) {
+    return {
+      original: userText,
+      improved: userText
+        .replace(/AI urgent/gi, "AI agent")
+        .replace(/maybe things are useful/gi, "it solves a clear user problem"),
+      explanationZh:
+        "这里的 urgent 很可能想表达 agent，需要先确认关键词；同时把 useful 这种泛词换成具体解决的问题。"
+    };
+  }
+
+  if (/\bit make\b/i.test(userText) || /\bmake route\b/i.test(userText)) {
+    return {
+      original: userText,
+      improved: userText.replace(/\bit make\b/gi, "it made").replace(/\bmake route\b/gi, "made the route"),
+      explanationZh: "这里需要保持过去时态，把 make 改成 made；项目复盘一般使用过去式。"
+    };
+  }
+
+  if (/\bmaybe\b|\bthings\b/i.test(userText)) {
+    return {
+      original: userText,
+      improved: userText
+        .replace(/\bmaybe\b/gi, "")
+        .replace(/\bthings\b/gi, "specific user problems")
+        .replace(/\s+/g, " ")
+        .trim(),
+      explanationZh: "maybe 和 things 会让回答显得不确定，建议换成更具体的结果或用户问题。"
+    };
+  }
+
+  return {
+    original: userText,
+    improved: `${userText} It improved one clear workflow and saved time for users.`,
+    explanationZh: "这句能表达项目主题，但结果还不够量化；建议补一个具体影响或数字。"
+  };
+}
+
+function createGroundedSentenceAnalysis(correction: ReturnType<typeof createGroundedCorrection>) {
+  const originalChanged = findChangedPhrase(correction.original, correction.improved, "original");
+  const improvedChanged = findChangedPhrase(correction.original, correction.improved, "improved");
+  const issueType: SentenceAnalysis["issueType"] = /urgent|agent/i.test(correction.original)
+    ? "pronunciation"
+    : /make|made|时态/.test(correction.explanationZh)
+      ? "grammar"
+      : /maybe|things|泛词/.test(correction.explanationZh)
+        ? "wording"
+        : "logic";
+
+  return {
+    original: correction.original,
+    improved: correction.improved,
+    issueType,
+    explanationZh: correction.explanationZh,
+    highlights: [
+      {
+        originalText: originalChanged,
+        improvedText: improvedChanged,
+        reasonZh: correction.explanationZh
+      }
+    ]
+  };
+}
+
+function findChangedPhrase(original: string, improved: string, side: "original" | "improved"): string {
+  const source = side === "original" ? original : improved;
+  const other = side === "original" ? improved : original;
+  const sourceWords = source.split(/\s+/).filter(Boolean);
+  const otherWords = other.split(/\s+/).filter(Boolean);
+  const max = Math.max(sourceWords.length, otherWords.length);
+
+  for (let index = 0; index < max; index += 1) {
+    if (sourceWords[index] !== otherWords[index]) {
+      return sourceWords.slice(index, index + 3).join(" ") || source;
+    }
+  }
+  return sourceWords.slice(0, 4).join(" ") || source;
+}
+
+function createGroundedPronunciationTips(userText: string) {
+  const tips = [];
+  if (/urgent|agent/i.test(userText)) {
+    tips.push({
+      wordOrPhrase: "agent",
+      issueZh: "agent 和 urgent 容易被听混，尤其是第一个元音和结尾 t。",
+      tipZh: "读 agent 时前半段放轻，/dʒ/ 要清楚，结尾 /t/ 收住但不要拖长。",
+      example: "It is about my AI agent project."
+    });
+  }
+  if (/project/i.test(userText)) {
+    tips.push({
+      wordOrPhrase: "project",
+      issueZh: "名词 project 的重音容易后移。",
+      tipZh: "作为名词时重音在前：PRO-ject，第二拍轻读。",
+      example: "My PRO-ject improved the workflow."
+    });
+  }
+  if (/maybe|things/i.test(userText)) {
+    tips.push({
+      wordOrPhrase: "maybe / things",
+      issueZh: "这类泛词会让语气显得犹豫。",
+      tipZh: "用更确定的关键词替换，句尾自然下落，听起来更像面试回答。",
+      example: "It solved a clear user problem."
+    });
+  }
+
+  return tips.length
+    ? tips
+    : [
+        {
+          wordOrPhrase: "result sentence",
+          issueZh: "结果句需要更稳定的节奏。",
+          tipZh: "先说结果，再说数字，数字前稍停顿，句尾自然下落。",
+          example: "It reduced planning time by 30%."
+        }
+      ];
+}
+
+function isUsefulImprovedSentence(original: string, improved: string): boolean {
+  const cleaned = improved.trim();
+  if (!cleaned) return false;
+  if (normalizeForGrounding(cleaned) === normalizeForGrounding(original)) return false;
+  return cleaned.split(/\s+/).filter(Boolean).length >= 3;
+}
+
+function createConversationAwareFallbackReport(
+  payload: unknown,
+  config: LiveConfig,
+  fallbackReason: string
+): ReportResult {
+  const userTurns = getUserTurns(payload);
+  const userText = firstUsefulUserText(userTurns);
+  const correction = createGroundedCorrection(userText);
+  const sentenceAnalysis = createGroundedSentenceAnalysis(correction);
+  const provider = config.apiMode === "live" ? config.llmProvider : "mock";
+  const weakArea = /urgent|agent/i.test(userText)
+    ? "关键词发音与确认"
+    : /\bmake\b/i.test(userText)
+      ? "语法时态"
+      : "结果量化表达";
+
+  return {
+    reportId: `report_${Date.now()}`,
+    totalScore: userTurns.length >= 2 ? 82 : 78,
+    dimensions: reportDimensionLabels.map((dimension, index) => ({
+      ...dimension,
+      score: [80, 76, 78, 79, 81, 82, 77][index] ?? 78,
+      explanationZh: `基于本次 ${userTurns.length || 1} 条用户发言评估，${dimension.labelZh}仍有可提升空间。`
+    })),
+    summaryZh: `本次报告基于你的实际发言生成。当前最需要补强的是${weakArea}，下一轮先把关键词说准，再补一个具体结果。`,
+    corrections: [correction],
+    suggestions: [
+      "先用一句话说清项目解决了什么问题。",
+      "把 maybe / things 这类泛词换成具体结果或用户影响。",
+      "回答结尾补一个数字，例如节省时间、提升准确率或减少重复操作。"
+    ],
+    coachCommentZh: `这次不是模板分数，我看到的是你的本次表达。先修正${weakArea}，回答会更像真实面试。`,
+    provider,
+    fallback: true,
+    fallbackReason,
+    sentenceAnalyses: [sentenceAnalysis],
+    pronunciationTips: createGroundedPronunciationTips(userText),
+    evidenceTurns: userTurns.slice(0, 3).map((turn) => ({
+      speaker: "user",
+      text: turn.text,
+      reasonZh: "这句来自本次练习，用于支撑报告纠错和提升建议。"
+    })),
+    nextPractice: {
+      goalZh: "把本次项目主题说准，并补一个可量化结果。",
+      targetSentence: /urgent/i.test(userText)
+        ? "It is about my AI agent project, and it solved a clear user problem."
+        : "My project improved one workflow and made the result easier to understand.",
+      chunks: /urgent/i.test(userText)
+        ? ["It is about my AI agent project", "and it solved", "a clear user problem"]
+        : ["My project improved one workflow", "and made the result", "easier to understand"],
+      drills: ["先慢读关键词。", "第二遍把结果动词读重。", "第三遍连成一句，句尾自然下落。"]
+    }
+  };
+}
+
+function normalizeGroundedCorrections(value: unknown, userTurns: ConversationTurn[]) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((correction) => {
+      const item = asRecord(correction);
+      const original = readText(item.original || item.originalText).trim();
+      if (!isTextGroundedInUserTurns(original, userTurns)) return null;
+
+      const groundedFallback = createGroundedCorrection(original);
+      const improved = readText(item.improved || item.improvedText || item.suggestion).trim();
+      const explanationZh = readText(item.explanationZh || item.explanation || item.reason).trim();
+
+      return {
+        original,
+        improved: isUsefulImprovedSentence(original, improved) ? improved : groundedFallback.improved,
+        explanationZh: explanationZh || groundedFallback.explanationZh
+      };
+    })
+    .filter((correction): correction is ReturnType<typeof createGroundedCorrection> => correction !== null);
+}
+
+function normalizeGroundedSentenceAnalyses(value: unknown, userTurns: ConversationTurn[]) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((analysis) => {
+      const item = asRecord(analysis);
+      const original = readText(item.original || item.originalText).trim();
+      if (!isTextGroundedInUserTurns(original, userTurns)) return null;
+
+      const fallbackCorrection = createGroundedCorrection(original);
+      const fallbackAnalysis = createGroundedSentenceAnalysis(fallbackCorrection);
+      const improved = readText(item.improved || item.improvedText || item.better).trim();
+      const improvedSentence = isUsefulImprovedSentence(original, improved) ? improved : fallbackCorrection.improved;
+      const issueTypeRaw = readText(item.issueType || item.type);
+      const issueType: SentenceAnalysis["issueType"] = ["grammar", "wording", "logic", "pronunciation"].includes(
+        issueTypeRaw
+      )
+        ? (issueTypeRaw as SentenceAnalysis["issueType"])
+        : fallbackAnalysis.issueType;
+      const explanationZh =
+        readText(item.explanationZh || item.explanation || item.reason).trim() ||
+        fallbackCorrection.explanationZh;
+      const highlights = Array.isArray(item.highlights)
+        ? item.highlights
+            .map((highlight) => {
+              const mark = asRecord(highlight);
+              const originalText = readText(mark.originalText || mark.original || mark.from).trim();
+              const improvedText = readText(mark.improvedText || mark.improved || mark.to).trim();
+              const reasonZh = readText(mark.reasonZh || mark.reason || mark.explanationZh).trim();
+              if (!originalText || !improvedText || !reasonZh) return null;
+              return { originalText, improvedText, reasonZh };
+            })
+            .filter((highlight): highlight is SentenceAnalysis["highlights"][number] => highlight !== null)
+        : [];
+
+      return {
+        original,
+        improved: improvedSentence,
+        issueType,
+        explanationZh,
+        highlights: highlights.length
+          ? highlights
+          : [
+              {
+                originalText: findChangedPhrase(original, improvedSentence, "original"),
+                improvedText: findChangedPhrase(original, improvedSentence, "improved"),
+                reasonZh: explanationZh
+              }
+            ]
+      };
+    })
+    .filter((analysis): analysis is SentenceAnalysis => analysis !== null);
+}
+
+function ensureReportGroundedInConversation(
+  report: Record<string, unknown>,
+  payload: unknown,
+  config: LiveConfig
+): Record<string, unknown> {
+  const userTurns = getUserTurns(payload);
+  if (!userTurns.length) return report;
+
+  const fallback = createConversationAwareFallbackReport(payload, config, "LLM report lacked grounded evidence");
+  const groundedCorrections = normalizeGroundedCorrections(report.corrections, userTurns);
+  const groundedAnalyses = normalizeGroundedSentenceAnalyses(report.sentenceAnalyses, userTurns);
+  const evidenceTurns = normalizeEvidenceTurns(report.evidenceTurns);
+  const hasGroundedEvidence = evidenceTurns?.some((turn) => isTextGroundedInUserTurns(turn.text, userTurns));
+
+  return {
+    ...report,
+    corrections: groundedCorrections.length ? groundedCorrections : fallback.corrections,
+    sentenceAnalyses: groundedAnalyses.length ? groundedAnalyses : fallback.sentenceAnalyses,
+    evidenceTurns: hasGroundedEvidence ? evidenceTurns : fallback.evidenceTurns,
+    pronunciationTips:
+      Array.isArray(report.pronunciationTips) && report.pronunciationTips.length
+        ? report.pronunciationTips
+        : fallback.pronunciationTips,
+    nextPractice: report.nextPractice || fallback.nextPractice
   };
 }
 
@@ -727,11 +1181,15 @@ async function synthesizeWithQwenTts(
 }
 
 export async function generateReportWithLlm(
-  _payload: unknown,
+  payload: unknown,
   config: LiveConfig
 ): Promise<ReportResult> {
   if (config.apiMode !== "live" || !config.llmApiKey) {
-    return mockReport();
+    return createConversationAwareFallbackReport(
+      payload,
+      config,
+      config.apiMode === "live" ? "LLM is not configured" : "API_MODE=mock"
+    );
   }
 
   try {
@@ -742,6 +1200,9 @@ export async function generateReportWithLlm(
         "Return one strict JSON object only. Do not include Markdown.",
         "The required JSON keys are reportId, totalScore, dimensions, summaryZh, corrections, suggestions, coachCommentZh, provider.",
         "Also include optional keys when possible: sentenceAnalyses, pronunciationTips, evidenceTurns, nextPractice.",
+        "Analyze only the supplied conversation_turns. Do not invent user sentences.",
+        "Every correction.original and sentenceAnalyses.original must be copied from an actual user turn.",
+        "If a weakness is not evidenced in the user turns, do not mention it.",
         "sentenceAnalyses must include 1-3 concrete user sentence fixes with phrase-level highlights.",
         "pronunciationTips must include words or phrases from the transcript with Chinese coaching tips.",
         "evidenceTurns must quote only user turns that justify the feedback.",
@@ -750,14 +1211,16 @@ export async function generateReportWithLlm(
         "Score the whole conversation, not a single isolated answer.",
         `provider must be ${config.llmProvider}.`
       ].join(" "),
-      JSON.stringify(_payload)
+      JSON.stringify(payload)
     );
 
-    return reportResultSchema.parse(normalizeReportJson(json, config.llmProvider));
+    const normalized = normalizeReportJson(json, config.llmProvider);
+    return reportResultSchema.parse(ensureReportGroundedInConversation(normalized, payload, config));
   } catch (error) {
-    return {
-      ...mockReport(),
-      fallbackReason: error instanceof Error ? error.message : "Qwen report request failed"
-    } as ReportResult;
+    return createConversationAwareFallbackReport(
+      payload,
+      config,
+      error instanceof Error ? error.message : "LLM report request failed"
+    );
   }
 }

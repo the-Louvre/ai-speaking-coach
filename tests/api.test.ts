@@ -1,9 +1,13 @@
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../server/app";
 import { reportResultSchema } from "../shared/schemas";
 
 describe("local API in mock mode", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   const app = createApp({ apiMode: "mock" });
 
   it("reports provider health without leaking secret values", async () => {
@@ -195,5 +199,241 @@ describe("local API in mock mode", () => {
     expect(parsed.pronunciationTips?.[0].wordOrPhrase).toBeTruthy();
     expect(parsed.evidenceTurns?.[0].speaker).toBe("user");
     expect(parsed.nextPractice?.targetSentence).toContain("project");
+  });
+
+  it("generates the fallback report from the current conversation instead of fixed demo sentences", async () => {
+    const started = await request(app)
+      .post("/api/session/start")
+      .send({ scenarioId: "interview", taskId: "internship-intro" })
+      .expect(200);
+
+    await request(app)
+      .post(`/api/session/${started.body.sessionId}/turns`)
+      .send({
+        speaker: "user",
+        text: "It is about my AI urgent project and maybe things are useful.",
+        timestamp: "2026-06-06T04:10:00.000Z"
+      })
+      .expect(200);
+
+    const response = await request(app)
+      .post("/api/report/generate")
+      .send({
+        sessionId: started.body.sessionId,
+        scenarioId: "interview",
+        taskId: "internship-intro",
+        taskFocus: "把项目结果说清楚"
+      })
+      .expect(200);
+
+    const parsed = reportResultSchema.parse(response.body);
+    const reportText = JSON.stringify(parsed);
+
+    expect(parsed.fallback).toBe(true);
+    expect(parsed.evidenceTurns?.[0].text).toContain("AI urgent project");
+    expect(reportText).toContain("AI urgent project");
+    expect(reportText).not.toContain("campus navigation app");
+  });
+
+  it("repairs incomplete live report corrections with grounded fallback text", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        const content = JSON.stringify({
+          reportId: "report_live_incomplete",
+          totalScore: 65,
+          dimensions: {
+            fluency: 7,
+            pronunciation: 5.8,
+            grammar: 6.2,
+            vocabulary: 6.4,
+            coherence: 6.6,
+            task_completion: 6.9,
+            interaction: 5.5
+          },
+          summaryZh: "用户介绍了项目，但关键词和结果表达需要更清楚。",
+          corrections: [
+            {
+              original: "It is about my AI urgent project and maybe things are useful.",
+              improved: "",
+              explanationZh: "关键词需要确认，表达也需要更具体。"
+            }
+          ],
+          sentenceAnalyses: [
+            {
+              original: "It is about my AI urgent project and maybe things are useful.",
+              improved: "",
+              issueType: "pronunciation",
+              explanationZh: "urgent 可能是 agent 的误识别。",
+              highlights: []
+            }
+          ],
+          suggestions: ["把项目关键词说准。"],
+          coachCommentZh: "先修正关键词，再补结果。",
+          evidenceTurns: [
+            {
+              speaker: "user",
+              text: "It is about my AI urgent project and maybe things are useful.",
+              reasonZh: "来自本次对话。"
+            }
+          ],
+          provider: "custom-openai-compatible"
+        });
+
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content
+                }
+              }
+            ]
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" }
+          }
+        );
+      })
+    );
+
+    const liveApp = createApp({ apiMode: "live" });
+    await request(liveApp)
+      .post("/api/settings")
+      .send({
+        apiMode: "live",
+        providerPreset: "custom",
+        llmProvider: "custom-openai-compatible",
+        llmBaseUrl: "https://runapi.co/v1",
+        llmModel: "gpt-4o-mini",
+        llmApiKey: "test-key"
+      })
+      .expect(200);
+
+    const started = await request(liveApp)
+      .post("/api/session/start")
+      .send({ scenarioId: "interview", taskId: "internship-intro" })
+      .expect(200);
+
+    await request(liveApp)
+      .post(`/api/session/${started.body.sessionId}/turns`)
+      .send({
+        speaker: "user",
+        text: "It is about my AI urgent project and maybe things are useful.",
+        timestamp: "2026-06-06T04:10:00.000Z"
+      })
+      .expect(200);
+
+    const response = await request(liveApp)
+      .post("/api/report/generate")
+      .send({
+        sessionId: started.body.sessionId,
+        scenarioId: "interview",
+        taskId: "internship-intro",
+        taskFocus: "把项目结果说清楚"
+      })
+      .expect(200);
+
+    const parsed = reportResultSchema.parse(response.body);
+
+    expect(parsed.fallback).not.toBe(true);
+    expect(parsed.dimensions.map((dimension) => dimension.score)).toEqual([70, 58, 62, 64, 66, 69, 55]);
+    expect(parsed.corrections[0].original).toContain("AI urgent project");
+    expect(parsed.corrections[0].improved).toContain("AI agent");
+    expect(parsed.sentenceAnalyses?.[0].improved).toContain("AI agent");
+    expect(parsed.sentenceAnalyses?.[0].highlights[0].improvedText).toBeTruthy();
+  });
+
+  it("keeps live dimension scores visually aligned with the total score", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        const content = JSON.stringify({
+          reportId: "report_live_score_scale",
+          totalScore: 65,
+          dimensions: {
+            fluency: 6,
+            pronunciation: 5,
+            grammar: 5,
+            vocabulary: 6,
+            coherence: 5,
+            task_completion: 6,
+            interaction: 5
+          },
+          summaryZh: "用户表达了项目，但结果量化不足。",
+          corrections: [
+            {
+              original: "The result is maybe the demo is OK but I do not have number.",
+              improved: "The demo works, but I need to add a clear result number.",
+              explanationZh: "把 maybe 和 OK 换成更明确的结果。"
+            }
+          ],
+          suggestions: ["补一个具体数字。"],
+          coachCommentZh: "先补结果数字。",
+          evidenceTurns: [
+            {
+              speaker: "user",
+              text: "The result is maybe the demo is OK but I do not have number.",
+              reasonZh: "来自本次对话。"
+            }
+          ],
+          provider: "custom-openai-compatible"
+        });
+
+        return new Response(
+          JSON.stringify({
+            choices: [{ message: { content } }]
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" }
+          }
+        );
+      })
+    );
+
+    const liveApp = createApp({ apiMode: "live" });
+    await request(liveApp)
+      .post("/api/settings")
+      .send({
+        apiMode: "live",
+        providerPreset: "custom",
+        llmProvider: "custom-openai-compatible",
+        llmBaseUrl: "https://runapi.co/v1",
+        llmModel: "gpt-4o-mini",
+        llmApiKey: "test-key"
+      })
+      .expect(200);
+
+    const started = await request(liveApp)
+      .post("/api/session/start")
+      .send({ scenarioId: "interview", taskId: "internship-intro" })
+      .expect(200);
+
+    await request(liveApp)
+      .post(`/api/session/${started.body.sessionId}/turns`)
+      .send({
+        speaker: "user",
+        text: "The result is maybe the demo is OK but I do not have number.",
+        timestamp: "2026-06-06T04:12:00.000Z"
+      })
+      .expect(200);
+
+    const response = await request(liveApp)
+      .post("/api/report/generate")
+      .send({
+        sessionId: started.body.sessionId,
+        scenarioId: "interview",
+        taskId: "internship-intro"
+      })
+      .expect(200);
+
+    const parsed = reportResultSchema.parse(response.body);
+    const scores = parsed.dimensions.map((dimension) => dimension.score);
+    const average = scores.reduce((sum, score) => sum + score, 0) / scores.length;
+
+    expect(scores).toEqual([71, 61, 61, 71, 61, 71, 61]);
+    expect(Math.abs(average - parsed.totalScore)).toBeLessThanOrEqual(1);
   });
 });

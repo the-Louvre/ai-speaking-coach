@@ -114,6 +114,7 @@ export const reportResultSchema = z.object({
   coachCommentZh: z.string(),
   provider: z.string(),
   fallback: z.boolean().optional(),
+  fallbackReason: z.string().optional(),
   sentenceAnalyses: z.array(sentenceAnalysisSchema).optional(),
   pronunciationTips: z.array(pronunciationTipSchema).optional(),
   evidenceTurns: z.array(evidenceTurnSchema).optional(),

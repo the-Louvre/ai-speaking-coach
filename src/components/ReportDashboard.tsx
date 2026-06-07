@@ -32,6 +32,8 @@ export function ReportDashboard({
   const primaryAnalysis = diagnostics.primaryAnalysis;
   const weakest = diagnostics.weakestDimension;
   const strongest = diagnostics.strongestDimension;
+  const userTurnCount = conversationTurns.filter((turn) => turn.speaker === "user" && turn.text.trim()).length;
+  const sourceLabel = report.fallback ? `${report.provider} fallback` : `${report.provider} live`;
 
   return (
     <section className="one-report" aria-label="课后报告">
@@ -47,6 +49,9 @@ export function ReportDashboard({
             <span>完成目标：{targetGoal}</span>
             <span>本次最该补强：{weakest?.labelZh ?? "表达细节"}</span>
             <span>最稳能力：{strongest?.labelZh ?? "任务完成"}</span>
+            <span className={`report-source-chip ${report.fallback ? "fallback" : "live"}`}>
+              分析来源：{sourceLabel} · 本次对话 {userTurnCount} 条用户发言
+            </span>
           </div>
         </div>
         <div className="one-report-actions" aria-label="报告操作">
